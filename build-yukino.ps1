@@ -1,0 +1,482 @@
+param(
+    [string]$OutputRoot = "D:\zhish\yukino.akane",
+    [string]$PackageName = "yukino.akane",
+    [string]$DisplayName = "Yukino",
+    [string]$Publisher = "CN=Yukino",
+    [switch]$Install,
+    [switch]$Clean
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+function Write-Step([string]$Message) {
+    Write-Host ""
+    Write-Host "== $Message ==" -ForegroundColor Cyan
+}
+
+function Resolve-SdkTool([string]$ToolName) {
+    $tool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter $ToolName -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "\\x64\\" } |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1
+    if (-not $tool) {
+        throw "Cannot find $ToolName under Windows Kits. Install Windows SDK or add the tool to PATH."
+    }
+    return $tool.FullName
+}
+
+function Remove-PathSafe([string]$Path, [string]$AllowedRoot) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $allowed = (Resolve-Path -LiteralPath $AllowedRoot).Path
+    if (-not $resolved.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove outside allowed root. Path=$resolved Root=$allowed"
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+function Replace-Text([string]$Path, [string]$Old, [string]$New) {
+    $text = [IO.File]::ReadAllText($Path)
+    $count = [regex]::Matches($text, [regex]::Escape($Old)).Count
+    if ($count -gt 0) {
+        [IO.File]::WriteAllText($Path, $text.Replace($Old, $New), [Text.UTF8Encoding]::new($false))
+    }
+    return $count
+}
+
+function Patch-TextFileBranding([string]$Path, [string]$PackageName, [string]$DisplayName) {
+    $text = [IO.File]::ReadAllText($Path)
+    $original = $text
+
+    # Replace user-visible app branding without renaming translation keys such as commentWithCodex.
+    $text = [regex]::Replace($text, "(?<![A-Za-z0-9_])Codex[A-Za-z]*", $DisplayName)
+    $text = [regex]::Replace($text, "(?<![A-Za-z0-9_])\.codex(?![A-Za-z0-9_-])", ".yukino")
+    $text = $text.Replace("codex://", "yukino://")
+    $text = $text.Replace("OpenAI.Codex", $PackageName)
+    $text = $text.Replace("com.openai.codex", $PackageName)
+    $text = $text.Replace('$HOME/.codex', '$HOME/.yukino')
+    $text = $text.Replace('`/.codex`', '`/.yukino`')
+    $text = $text.Replace('`.codex`', '`.yukino`')
+    $text = $text.Replace('.codex/environments', '.yukino/environments')
+    $text = $text.Replace('your .codex folder', 'your .yukino folder')
+    $text = $text.Replace('your `.codex` folder', 'your `.yukino` folder')
+    $text = $text.Replace('codex-desktop-', 'yukino-desktop-')
+
+    if ($text -ne $original) {
+        [IO.File]::WriteAllText($Path, $text, [Text.UTF8Encoding]::new($false))
+        return $true
+    }
+    return $false
+}
+
+function Patch-TextTreeBranding([string]$Root, [string]$PackageName, [string]$DisplayName) {
+    if (-not (Test-Path -LiteralPath $Root)) {
+        return 0
+    }
+    $extensions = @(".css", ".html", ".json", ".js", ".md", ".toml", ".txt", ".yaml", ".yml")
+    $patched = 0
+    foreach ($file in Get-ChildItem -LiteralPath $Root -File -Recurse) {
+        if ($file.FullName -like "*\node_modules\*") {
+            continue
+        }
+        if ($extensions -notcontains $file.Extension.ToLowerInvariant()) {
+            continue
+        }
+        if (Patch-TextFileBranding -Path $file.FullName -PackageName $PackageName -DisplayName $DisplayName) {
+            $patched += 1
+        }
+    }
+    return $patched
+}
+
+function Patch-UpdaterIsolation([string]$BootstrapPath) {
+    $text = [IO.File]::ReadAllText($BootstrapPath)
+    $marker = "Yukino updater disabled"
+    if ($text.Contains($marker)) {
+        return
+    }
+
+    $needle = 'let{desktopSentry:r,sparkleManager:i}=e;'
+    $patch = 'let{desktopSentry:r,sparkleManager:i}=e;(()=>{let e=`Yukino updater disabled`;if(i&&!i.__yukinoUpdaterDisabled){i.__yukinoUpdaterDisabled=!0;i.updater=null;i.isUpdateReady=!1;i.updateLifecycleState=`idle`;i.installProgressPercent=null;i.lastUnavailableReason=e;i.initialize=async()=>{i.updater=null;i.isUpdateReady=!1;i.updateLifecycleState=`idle`;i.installProgressPercent=null;i.lastUnavailableReason=e};i.hasUpdater=()=>!1;i.getUnavailableReason=()=>e;i.getIsUpdateReady=()=>!1;i.getInstallProgressPercent=()=>null;i.getUpdateLifecycleState=()=>`idle`;i.checkForUpdates=async()=>{};i.installUpdatesIfAvailable=async()=>{};}})();'
+    if (-not $text.Contains($needle)) {
+        throw "Cannot find sparkleManager bootstrap hook in $BootstrapPath"
+    }
+
+    $text = $text.Replace($needle, $patch)
+    [IO.File]::WriteAllText($BootstrapPath, $text, [Text.UTF8Encoding]::new($false))
+}
+
+function Patch-Manifest([string]$ManifestPath, [string]$PackageName, [string]$DisplayName, [string]$Publisher, [string]$Version) {
+    [xml]$xml = Get-Content -LiteralPath $ManifestPath
+    $xml.Package.Identity.Name = $PackageName
+    $xml.Package.Identity.Publisher = $Publisher
+    $xml.Package.Identity.Version = $Version
+    $xml.Package.Properties.DisplayName = $DisplayName
+    $xml.Package.Properties.PublisherDisplayName = $DisplayName
+    $app = $xml.Package.Applications.Application
+    $app.Executable = "app\$DisplayName.exe"
+    $app.VisualElements.DisplayName = $DisplayName
+    $app.VisualElements.Description = $DisplayName
+    $protocol = $xml.GetElementsByTagName("uap:Protocol") | Select-Object -First 1
+    if ($protocol) {
+        $protocol.Name = "yukino"
+    }
+    $xml.Save($ManifestPath)
+}
+
+function Patch-UnsupportedExperimentalFeatureSync([string]$AssetsDir) {
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        return
+    }
+
+    $pattern = 'var\s+([A-Za-z_$][A-Za-z0-9_$]*)=\[`apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`,[A-Za-z_$][A-Za-z0-9_$]*\];function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(\)\{'
+    $patched = 0
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if ($text -notmatch $pattern) {
+            continue
+        }
+
+        $text = [regex]::Replace(
+            $text,
+            $pattern,
+            'var $1=[`apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`];function $2(){',
+            1
+        )
+        [IO.File]::WriteAllText($asset.FullName, $text, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -gt 0) {
+        Write-Host "Yukino unsupported experimental features filtered in $patched webview entry file(s)"
+    }
+}
+
+function Patch-PluginAuthGate([string]$AssetsDir) {
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        return
+    }
+
+    $pattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'
+    $patched = 0
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "gradient-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if ($text -notmatch $pattern) {
+            continue
+        }
+
+        $text = [regex]::Replace($text, $pattern, 'function $1($2){return !1}', 1)
+        [IO.File]::WriteAllText($asset.FullName, $text, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -eq 0) {
+        throw "Cannot find plugin API-key auth gate in webview assets."
+    }
+
+    Write-Host "Disabled ChatGPT-only plugin auth gate in $patched webview asset file(s)"
+}
+
+function Patch-AgentSettingsConfigWrites([string]$AssetsDir) {
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        return
+    }
+
+    $old = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,mergeStrategy:`upsert`,filePath:z.filePath,expectedVersion:z.expectedVersion})'
+    $new = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
+    $patched = 0
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "agent-settings-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains($old)) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $text.Replace($old, $new), [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -eq 0) {
+        throw "Cannot find Agent Settings config write call in webview assets."
+    }
+
+    Write-Host "Patched Agent Settings config writes in $patched webview asset file(s)"
+}
+
+function Patch-BuildJs([string]$ExtractDir) {
+    $buildDir = Join-Path $ExtractDir ".vite\build"
+    $bootstrap = Join-Path $buildDir "bootstrap.js"
+    $prefix = 'process.env.CODEX_HOME||(process.env.CODEX_HOME=require(`node:path`).join(require(`node:os`).homedir(),`.yukino`));process.env.YUKINO_HOME||(process.env.YUKINO_HOME=process.env.CODEX_HOME);'
+    $bootstrapText = [IO.File]::ReadAllText($bootstrap)
+    if (-not $bootstrapText.StartsWith($prefix)) {
+        [IO.File]::WriteAllText($bootstrap, $prefix + $bootstrapText, [Text.UTF8Encoding]::new($false))
+    }
+    Patch-UpdaterIsolation $bootstrap
+
+    foreach ($file in Get-ChildItem -LiteralPath $buildDir -File -Filter "*.js") {
+        $path = $file.FullName
+        [void](Replace-Text $path "Codex" "Yukino")
+        [void](Replace-Text $path "codex://" "yukino://")
+        [void](Replace-Text $path '`codex:`' '`yukino:`')
+        [void](Replace-Text $path '$HOME/.codex' '$HOME/.yukino')
+        [void](Replace-Text $path '`/.codex`' '`/.yukino`')
+        [void](Replace-Text $path '`.codex`' '`.yukino`')
+        [void](Replace-Text $path ',`.codex`' ',`.yukino`')
+        [void](Replace-Text $path ',`Documents`,`Codex`' ',`Documents`,`Yukino`')
+        [void](Replace-Text $path ',`Codex`,`Logs`' ',`Yukino`,`Logs`')
+        [void](Replace-Text $path ',`codex`,`logs`' ',`yukino`,`logs`')
+        [void](Replace-Text $path '`codex-desktop-' '`yukino-desktop-')
+        [void](Replace-Text $path "com.openai.codex" "yukino.akane")
+
+        $text = [IO.File]::ReadAllText($path)
+        $text = [regex]::Replace($text, "\.codex(?=[\s/])", ".yukino")
+        [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+    }
+
+    $packageJson = Join-Path $ExtractDir "package.json"
+    [void](Replace-Text $packageJson '"name": "codex-electron"' '"name": "yukino-akane-electron"')
+    [void](Replace-Text $packageJson '"productName": "Codex"' '"productName": "Yukino"')
+    [void](Replace-Text $packageJson '"author": "OpenAI"' '"author": "Yukino"')
+    [void](Replace-Text $packageJson '"description": "Codex"' '"description": "Yukino"')
+    [void](Replace-Text $packageJson '"codexWindowsPackageIdentity": "OpenAI.Codex"' '"codexWindowsPackageIdentity": "yukino.akane"')
+    [void](Replace-Text $packageJson '"codexWindowsPackagePublisher": "CN=OpenAI, O=OpenAI, L=San Francisco, S=California, C=US"' '"codexWindowsPackagePublisher": "CN=Yukino"')
+
+    $indexHtml = Join-Path $ExtractDir "webview\index.html"
+    if (Test-Path -LiteralPath $indexHtml) {
+        [void](Replace-Text $indexHtml "<title>Codex</title>" "<title>Yukino</title>")
+    }
+
+    Patch-UnsupportedExperimentalFeatureSync -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-PluginAuthGate -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-AgentSettingsConfigWrites -AssetsDir (Join-Path $ExtractDir "webview\assets")
+
+    foreach ($relative in @("native-menu-locales", "skills", "webview")) {
+        $patched = Patch-TextTreeBranding -Root (Join-Path $ExtractDir $relative) -PackageName "yukino.akane" -DisplayName "Yukino"
+        if ($patched -gt 0) {
+            Write-Host "Patched $patched text resource file(s) under $relative"
+        }
+    }
+    [void](Patch-TextFileBranding -Path $packageJson -PackageName "yukino.akane" -DisplayName "Yukino")
+
+    foreach ($settingsPage in Get-ChildItem -LiteralPath (Join-Path $ExtractDir "webview\assets") -File -Filter "settings-page-*.js") {
+        $text = [IO.File]::ReadAllText($settingsPage.FullName)
+        $old = 'case`plugins-settings`:return d===`extension`&&u;case`skills-settings`:return d===`extension`&&!u;'
+        $new = 'case`plugins-settings`:return d===`electron`||d===`extension`&&u;case`skills-settings`:return d===`extension`&&!u;'
+        if ($text.Contains($old)) {
+            [IO.File]::WriteAllText($settingsPage.FullName, $text.Replace($old, $new), [Text.UTF8Encoding]::new($false))
+            Write-Host "Enabled desktop plugins settings entry in $($settingsPage.Name)"
+        }
+    }
+}
+
+function Patch-LooseResources([string]$ResourcesRoot, [string]$PackageName, [string]$DisplayName) {
+    foreach ($relative in @("plugins")) {
+        $patched = Patch-TextTreeBranding -Root (Join-Path $ResourcesRoot $relative) -PackageName $PackageName -DisplayName $DisplayName
+        if ($patched -gt 0) {
+            Write-Host "Patched $patched loose resource file(s) under $relative"
+        }
+    }
+}
+
+function Patch-AsarHash([string]$ExePath, [string]$OldHash, [string]$NewHash) {
+    if ($OldHash.Length -ne 64 -or $NewHash.Length -ne 64) {
+        throw "ASAR hashes must be 64 ASCII characters."
+    }
+    $matches = @(rg -a -b -o $OldHash $ExePath)
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one embedded ASAR hash '$OldHash' in $ExePath, found $($matches.Count)."
+    }
+    $offset = [Int64](($matches[0] -split ":")[0])
+    $bytes = [Text.Encoding]::ASCII.GetBytes($NewHash)
+    $stream = [IO.File]::Open($ExePath, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+    try {
+        [void]$stream.Seek($offset, [IO.SeekOrigin]::Begin)
+        $stream.Write($bytes, 0, $bytes.Length)
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+Write-Step "Resolve latest installed OpenAI.Codex"
+$sourcePackage = Get-AppxPackage -Name "OpenAI.Codex" | Sort-Object Version -Descending | Select-Object -First 1
+if (-not $sourcePackage) {
+    throw "OpenAI.Codex is not installed."
+}
+$sourceRoot = $sourcePackage.InstallLocation
+$sourceVersion = [version]$sourcePackage.Version
+$targetVersion = "{0}.{1}.{2}.{3}" -f $sourceVersion.Major, $sourceVersion.Minor, $sourceVersion.Build, ($sourceVersion.Revision + 1)
+Write-Host "Source: $($sourcePackage.PackageFullName)"
+Write-Host "Target version: $targetVersion"
+
+$src = Join-Path $OutputRoot "src_unpacked"
+$out = Join-Path $OutputRoot "out"
+$logs = Join-Path $OutputRoot "logs"
+$work = Join-Path $logs ("build-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+New-Item -ItemType Directory -Path $out, $logs, $work -Force | Out-Null
+
+if ($Clean) {
+    Write-Step "Clean previous source copy"
+    Remove-PathSafe $src $OutputRoot
+}
+
+Write-Step "Copy source package"
+Remove-PathSafe $src $OutputRoot
+Copy-Item -LiteralPath $sourceRoot -Destination $src -Recurse -Force
+
+Write-Step "Remove old package metadata"
+foreach ($relative in @("AppxBlockMap.xml", "AppxSignature.p7x", "AppxMetadata", "microsoft.system.package.metadata")) {
+    Remove-PathSafe (Join-Path $src $relative) $src
+}
+
+Write-Step "Patch manifest and executable name"
+Patch-Manifest -ManifestPath (Join-Path $src "AppxManifest.xml") -PackageName $PackageName -DisplayName $DisplayName -Publisher $Publisher -Version $targetVersion
+$oldExe = Join-Path $src "app\Codex.exe"
+$newExe = Join-Path $src "app\$DisplayName.exe"
+if (Test-Path -LiteralPath $oldExe) {
+    Move-Item -LiteralPath $oldExe -Destination $newExe -Force
+}
+elseif (-not (Test-Path -LiteralPath $newExe)) {
+    throw "Cannot find app executable to rename."
+}
+
+Write-Step "Extract and patch app.asar"
+$resources = Join-Path $src "app\resources"
+$asarPath = Join-Path $resources "app.asar"
+$extractDir = Join-Path $work "app-extracted"
+New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+npx --yes @electron/asar extract $asarPath $extractDir
+Patch-BuildJs $extractDir
+Patch-LooseResources -ResourcesRoot $resources -PackageName $PackageName -DisplayName $DisplayName
+
+Write-Step "Validate patched JavaScript"
+$failed = @()
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $extractDir ".vite\build") -File -Filter "*.js") {
+    node --check $file.FullName
+    if ($LASTEXITCODE -ne 0) {
+        $failed += $file.Name
+    }
+}
+if ($failed.Count -gt 0) {
+    throw "node --check failed: $($failed -join ', ')"
+}
+
+Write-Step "Repack app.asar"
+$patchedAsar = Join-Path $work "app.yukino.asar"
+Remove-PathSafe $patchedAsar $work
+Remove-PathSafe "$patchedAsar.unpacked" $work
+npx --yes @electron/asar pack $extractDir $patchedAsar --unpack-dir "{node_modules/better-sqlite3,node_modules/node-pty}"
+Copy-Item -LiteralPath $patchedAsar -Destination $asarPath -Force
+Remove-PathSafe (Join-Path $resources "app.asar.unpacked") $resources
+Copy-Item -LiteralPath "$patchedAsar.unpacked" -Destination (Join-Path $resources "app.asar.unpacked") -Recurse -Force
+
+Write-Step "Patch Electron ASAR integrity hash"
+$launchLog = Join-Path $work "launch-before-hash.log"
+$launchStdout = Join-Path $work "launch-before-hash.stdout.log"
+$launchStderr = Join-Path $work "launch-before-hash.stderr.log"
+$env:ELECTRON_ENABLE_LOGGING = "true"
+$env:ELECTRON_ENABLE_STACK_DUMPING = "true"
+$launch = Start-Process -FilePath $newExe -ArgumentList @("--enable-logging=stderr", "--v=1") -RedirectStandardOutput $launchStdout -RedirectStandardError $launchStderr -Wait -PassThru
+$logText = @(
+    if (Test-Path -LiteralPath $launchStdout) { Get-Content -LiteralPath $launchStdout -Raw }
+    if (Test-Path -LiteralPath $launchStderr) { Get-Content -LiteralPath $launchStderr -Raw }
+) -join "`n"
+[IO.File]::WriteAllText($launchLog, $logText, [Text.UTF8Encoding]::new($false))
+$match = [regex]::Match($logText, "Integrity check failed for asar archive \(([a-f0-9]{64}) vs ([a-f0-9]{64})\)")
+if ($match.Success) {
+    Patch-AsarHash -ExePath $newExe -OldHash $match.Groups[1].Value -NewHash $match.Groups[2].Value
+    Write-Host "Patched ASAR hash $($match.Groups[1].Value) -> $($match.Groups[2].Value)"
+}
+elseif ($launch.ExitCode -eq 0) {
+    Write-Host "No ASAR hash patch needed."
+}
+else {
+    throw "Could not parse ASAR integrity hash from $launchLog"
+}
+
+Write-Step "Smoke source launch"
+Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "$DisplayName.exe" } | ForEach-Object {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
+Start-Sleep -Seconds 2
+$process = Start-Process -FilePath $newExe -PassThru
+Start-Sleep -Seconds 8
+$process.Refresh()
+if ($process.HasExited) {
+    throw "Source Yukino process exited during smoke test."
+}
+Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $newExe } | ForEach-Object {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+Write-Step "Pack and sign MSIX"
+$makeappx = Resolve-SdkTool "makeappx.exe"
+$signtool = Resolve-SdkTool "signtool.exe"
+$msix = Join-Path $out ("{0}_{1}_x64.msix" -f $PackageName, $targetVersion)
+& $makeappx pack /d $src /p $msix /o
+if ($LASTEXITCODE -ne 0) {
+    throw "makeappx pack failed."
+}
+
+$cert = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+    Where-Object { $_.Subject -eq $Publisher -and $_.HasPrivateKey } |
+    Sort-Object NotAfter -Descending |
+    Select-Object -First 1
+if (-not $cert) {
+    $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $Publisher -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy Exportable -KeyUsage DigitalSignature -NotAfter (Get-Date).AddYears(5)
+}
+$cerPath = Join-Path $out "$DisplayName.cer"
+Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
+certutil -addstore -f Root $cerPath | Out-Null
+
+& $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $msix
+if ($LASTEXITCODE -ne 0) {
+    throw "signtool sign failed."
+}
+& $signtool verify /pa /v $msix
+if ($LASTEXITCODE -ne 0) {
+    throw "signtool verify failed."
+}
+
+Write-Step "Verify package structure"
+$verifyDir = Join-Path $out ("verify-unpack-" + $targetVersion)
+Remove-PathSafe $verifyDir $out
+& $makeappx unpack /p $msix /d $verifyDir /o | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "makeappx unpack verification failed."
+}
+
+if ($Install) {
+    Write-Step "Install Yukino package"
+    Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "$DisplayName.exe" -or ($_.Name -eq "codex.exe" -and $_.ExecutablePath -like "*$PackageName*") } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    $existing = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Remove-AppxPackage -Package $existing.PackageFullName
+    }
+    Add-AppxPackage -Path $msix -ForceApplicationShutdown -ForceUpdateFromAnyVersion
+
+    $verifyScript = Join-Path $OutputRoot "verify-yukino.ps1"
+    if (Test-Path -LiteralPath $verifyScript) {
+        Write-Step "Verify installed Yukino package"
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $verifyScript -ProjectRoot $OutputRoot -PackageName $PackageName
+        if ($LASTEXITCODE -ne 0) {
+            throw "Yukino post-install verification failed."
+        }
+    }
+    else {
+        Write-Host "Skipping post-install verification; missing $verifyScript" -ForegroundColor Yellow
+    }
+}
+
+Write-Step "Done"
+[pscustomobject]@{
+    SourcePackage = $sourcePackage.PackageFullName
+    TargetVersion = $targetVersion
+    Msix = $msix
+    WorkDir = $work
+    Installed = [bool]$Install
+}

@@ -1,0 +1,28 @@
+# Generated package contents and verification output.
+/src_unpacked/
+/out/
+/logs/
+
+# Large installer/package artifacts.
+*.msix
+*.appx
+*.appxbundle
+*.msixbundle
+*.cer
+*.pfx
+
+# Repacked Electron archives and extracted bundles.
+*.asar
+*.asar.unpacked/
+app-extracted/
+app-unpacked-inspect/
+
+# Runtime logs and transient checks.
+*.log
+verify-bootstrap-home-final.js
+
+# Local editor and OS noise.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
