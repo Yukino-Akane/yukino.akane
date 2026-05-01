@@ -2,6 +2,8 @@
 
 Yukino Akane is a local maintenance workspace for rebuilding the installed Codex Desktop MSIX as a branded Yukino package.
 
+This is a transitional local verification workflow. Before publishing public releases, migrate the patches to a reproducible source-based build from the open-source `openai/codex` codebase instead of distributing an MSIX rebuilt from an installed desktop package.
+
 The repository tracks the rebuild scripts and operator notes only. Generated package copies, extracted ASAR trees, verification directories, MSIX files, certificates, and logs are intentionally ignored because they are large and reproducible.
 
 ## Current State
@@ -42,10 +44,11 @@ The script resolves the currently installed `OpenAI.Codex` package and emits a t
 powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 ```
 
-The latest known verification passed with one warning: the user config still contains a legacy `[windows] sandbox` value. The active top-level config values were valid:
+The latest known verification keeps the `[windows] sandbox` value as a compatibility check because the current desktop runtime may still require it. The active top-level config values were valid:
 
 - `approval_policy = "never"`
 - `sandbox_mode = "danger-full-access"`
+- `[windows] sandbox = "elevated"`
 - `features.plugins = true`
 - `browser-use@openai-bundled` enabled
 

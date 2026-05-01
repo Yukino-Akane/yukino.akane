@@ -221,10 +221,10 @@ if (Test-Path -LiteralPath $ConfigPath) {
 
     $legacyWindowsSandbox = [regex]::IsMatch($configText, '(?ms)^\s*\[windows\]\s*(?:(?!^\s*\[).)*?^\s*sandbox\s*=')
     if ($legacyWindowsSandbox) {
-        Add-Check "legacy-windows-sandbox" "WARN" "Legacy [windows] sandbox value still exists"
+        Add-Check "windows-sandbox-compat" "PASS" "[windows] sandbox compatibility value is present"
     }
     else {
-        Add-Check "legacy-windows-sandbox" "PASS" "No legacy [windows] sandbox value"
+        Add-Check "windows-sandbox-compat" "WARN" "No [windows] sandbox compatibility value; current desktop runtime may prompt for sandbox setup"
     }
 
     if (Test-TomlSectionBoolean $configText "features" "plugins" $true) {

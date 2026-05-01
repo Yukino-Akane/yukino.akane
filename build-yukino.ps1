@@ -1,5 +1,5 @@
 param(
-    [string]$OutputRoot = "D:\zhish\yukino.akane",
+    [string]$OutputRoot = $PSScriptRoot,
     [string]$PackageName = "yukino.akane",
     [string]$DisplayName = "Yukino",
     [string]$Publisher = "CN=Yukino",

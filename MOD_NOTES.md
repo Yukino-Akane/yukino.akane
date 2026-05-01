@@ -83,14 +83,15 @@ Latest observed result:
 - `latest-msix`: PASS, `out\yukino.akane_26.429.2026.1_x64.msix`.
 - `config-approval-policy`: PASS, `approval_policy=never`.
 - `config-sandbox-mode`: PASS, `sandbox_mode=danger-full-access`.
+- `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
 - `latest-batch-write-log`: PASS.
 - `recent-config-conflicts`: PASS, historical conflicts only.
 
-Known warning:
+Sandbox compatibility note:
 
-- `legacy-windows-sandbox`: WARN. The config still contains a legacy `[windows] sandbox` value, although the active top-level `sandbox_mode` is valid.
+- Keep the `[windows] sandbox` value for current desktop compatibility until the runtime no longer requires it. The active top-level `sandbox_mode` is also valid.
 
 ## Useful Commands
 
@@ -121,6 +122,6 @@ Get-AppxPackage -Name yukino.akane
 
 ## Follow-Ups
 
-- Decide whether to clean the legacy `[windows] sandbox` value from `%USERPROFILE%\.yukino\config.toml`.
+- Keep the `[windows] sandbox` value in `%USERPROFILE%\.yukino\config.toml` for current desktop compatibility until the runtime no longer requires it.
 - Consider adding a small release checklist whenever a new official Codex version becomes the source package.
 - Consider factoring brittle minified-asset patch patterns into named tests or probes so upstream asset changes fail with clearer messages.
