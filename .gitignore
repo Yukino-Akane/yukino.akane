@@ -21,6 +21,18 @@ app-unpacked-inspect/
 *.log
 verify-bootstrap-home-final.js
 
+# Local credentials and machine-specific configuration.
+.env
+.env.*
+*.key
+*.pem
+*.ppk
+*.credentials.json
+auth.json
+credentials.json
+.yukino/
+.codex/
+
 # Local editor and OS noise.
 .DS_Store
 Thumbs.db

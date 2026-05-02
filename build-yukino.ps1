@@ -3,6 +3,8 @@ param(
     [string]$PackageName = "yukino.akane",
     [string]$DisplayName = "Yukino",
     [string]$Publisher = "CN=Yukino",
+    [string]$IconSource = (Join-Path $PSScriptRoot "assets\yukino-icon-source.jpg"),
+    [string]$SidebarBackgroundSource = (Join-Path $PSScriptRoot "assets\yukino-sidebar-background.png"),
     [switch]$Install,
     [switch]$Clean
 )
@@ -127,6 +129,28 @@ function Patch-Manifest([string]$ManifestPath, [string]$PackageName, [string]$Di
     $xml.Save($ManifestPath)
 }
 
+function Update-AppxIconAssets([string]$PackageRoot, [string]$SourceImage) {
+    if (-not (Test-Path -LiteralPath $SourceImage)) {
+        throw "Icon source image not found: $SourceImage"
+    }
+
+    $generator = Join-Path $PSScriptRoot "scripts\New-YukinoIconAssets.ps1"
+    if (-not (Test-Path -LiteralPath $generator)) {
+        throw "Icon asset generator not found: $generator"
+    }
+
+    $assetsDir = Join-Path $PackageRoot "Assets"
+    if (-not (Test-Path -LiteralPath $assetsDir)) {
+        throw "Package Assets directory not found: $assetsDir"
+    }
+
+    $electronIcon = Join-Path $PackageRoot "app\resources\icon.ico"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $generator -SourceImage $SourceImage -OutputDir $assetsDir -IconPath $electronIcon
+    if ($LASTEXITCODE -ne 0) {
+        throw "Icon asset generator failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Patch-UnsupportedExperimentalFeatureSync([string]$AssetsDir) {
     if (-not (Test-Path -LiteralPath $AssetsDir)) {
         return
@@ -205,7 +229,78 @@ function Patch-AgentSettingsConfigWrites([string]$AssetsDir) {
     Write-Host "Patched Agent Settings config writes in $patched webview asset file(s)"
 }
 
-function Patch-BuildJs([string]$ExtractDir) {
+function Patch-WebviewSidebarBackground([string]$ExtractDir, [string]$SourceImage) {
+    if (-not (Test-Path -LiteralPath $SourceImage)) {
+        throw "Sidebar background source image not found: $SourceImage"
+    }
+
+    $assetsDir = Join-Path $ExtractDir "webview\assets"
+    if (-not (Test-Path -LiteralPath $assetsDir)) {
+        throw "Webview assets directory not found: $assetsDir"
+    }
+
+    $assetName = "yukino-sidebar-background.png"
+    Copy-Item -LiteralPath $SourceImage -Destination (Join-Path $assetsDir $assetName) -Force
+
+    $cssFile = Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css" |
+        Where-Object {
+            $css = [IO.File]::ReadAllText($_.FullName)
+            $css.Contains(".main-surface") -and $css.Contains("--color-token-side-bar-background")
+        } |
+        Select-Object -First 1
+    if (-not $cssFile) {
+        throw "Cannot find main webview CSS asset for Yukino sidebar background patch."
+    }
+
+    $markerStart = "/* Yukino sidebar background patch */"
+    $markerEnd = "/* End Yukino sidebar background patch */"
+    $patch = @'
+/* Yukino sidebar background patch */
+:root {
+  --yukino-sidebar-background-image: url("./yukino-sidebar-background.png");
+  --yukino-sidebar-background-width: clamp(280px, 27vw, 430px);
+  --yukino-sidebar-background-half-width: calc(var(--yukino-sidebar-background-width) / 2);
+  --yukino-sidebar-portrait-half-width: 42.105263vh;
+}
+
+[data-codex-window-type=electron] body {
+  background-image:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--color-token-side-bar-background) 42%, transparent) 0%,
+      color-mix(in srgb, var(--color-token-side-bar-background) 60%, transparent) 72%,
+      transparent 100%),
+    var(--yukino-sidebar-background-image);
+  background-position: left top, calc(var(--yukino-sidebar-background-half-width) - var(--yukino-sidebar-portrait-half-width)) center;
+  background-repeat: no-repeat, no-repeat;
+  background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;
+}
+
+[data-codex-window-type=electron] .bg-token-side-bar-background,
+[data-codex-window-type=electron] .bg-token-side-bar-background\/90 {
+  background-color: color-mix(in srgb, var(--color-token-side-bar-background) 54%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-codex-window-type=electron] .electron\:dark\:bg-token-side-bar-background:where([data-codex-window-type=electron] .electron\:dark\:bg-token-side-bar-background) {
+    background-color: color-mix(in srgb, var(--color-token-side-bar-background) 48%, transparent);
+  }
+}
+
+[data-codex-window-type=electron] .main-surface:where([data-codex-window-type=electron] .main-surface) {
+  background-color: var(--color-token-main-surface-primary);
+  background-image: none;
+}
+/* End Yukino sidebar background patch */
+'@
+
+    $text = [IO.File]::ReadAllText($cssFile.FullName)
+    $pattern = [regex]::Escape($markerStart) + ".*?" + [regex]::Escape($markerEnd)
+    $text = [regex]::Replace($text, $pattern, "", [Text.RegularExpressions.RegexOptions]::Singleline).TrimEnd()
+    [IO.File]::WriteAllText($cssFile.FullName, $text + "`n" + $patch + "`n", [Text.UTF8Encoding]::new($false))
+    Write-Host "Patched Yukino sidebar background into $($cssFile.Name)"
+}
+
+function Patch-BuildJs([string]$ExtractDir, [string]$SidebarBackgroundSource) {
     $buildDir = Join-Path $ExtractDir ".vite\build"
     $bootstrap = Join-Path $buildDir "bootstrap.js"
     $prefix = 'process.env.CODEX_HOME||(process.env.CODEX_HOME=require(`node:path`).join(require(`node:os`).homedir(),`.yukino`));process.env.YUKINO_HOME||(process.env.YUKINO_HOME=process.env.CODEX_HOME);'
@@ -251,6 +346,7 @@ function Patch-BuildJs([string]$ExtractDir) {
     Patch-UnsupportedExperimentalFeatureSync -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-PluginAuthGate -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-AgentSettingsConfigWrites -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-WebviewSidebarBackground -ExtractDir $ExtractDir -SourceImage $SidebarBackgroundSource
 
     foreach ($relative in @("native-menu-locales", "skills", "webview")) {
         $patched = Patch-TextTreeBranding -Root (Join-Path $ExtractDir $relative) -PackageName "yukino.akane" -DisplayName "Yukino"
@@ -333,6 +429,7 @@ foreach ($relative in @("AppxBlockMap.xml", "AppxSignature.p7x", "AppxMetadata",
 
 Write-Step "Patch manifest and executable name"
 Patch-Manifest -ManifestPath (Join-Path $src "AppxManifest.xml") -PackageName $PackageName -DisplayName $DisplayName -Publisher $Publisher -Version $targetVersion
+Update-AppxIconAssets -PackageRoot $src -SourceImage $IconSource
 $oldExe = Join-Path $src "app\Codex.exe"
 $newExe = Join-Path $src "app\$DisplayName.exe"
 if (Test-Path -LiteralPath $oldExe) {
@@ -348,7 +445,7 @@ $asarPath = Join-Path $resources "app.asar"
 $extractDir = Join-Path $work "app-extracted"
 New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 npx --yes @electron/asar extract $asarPath $extractDir
-Patch-BuildJs $extractDir
+Patch-BuildJs -ExtractDir $extractDir -SidebarBackgroundSource $SidebarBackgroundSource
 Patch-LooseResources -ResourcesRoot $resources -PackageName $PackageName -DisplayName $DisplayName
 
 Write-Step "Validate patched JavaScript"

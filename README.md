@@ -4,7 +4,7 @@ Yukino Akane is a local maintenance workspace for rebuilding the installed Codex
 
 This is a transitional local verification workflow. Before publishing public releases, migrate the patches to a reproducible source-based build from the open-source `openai/codex` codebase instead of distributing an MSIX rebuilt from an installed desktop package.
 
-The repository tracks the rebuild scripts and operator notes only. Generated package copies, extracted ASAR trees, verification directories, MSIX files, certificates, and logs are intentionally ignored because they are large and reproducible.
+The repository tracks the rebuild scripts, source branding assets, verification tests, and operator notes only. Generated package copies, extracted ASAR trees, verification directories, MSIX files, certificates, credentials, and logs are intentionally ignored because they are large, reproducible, or machine-local.
 
 ## Current State
 
@@ -20,6 +20,9 @@ The repository tracks the rebuild scripts and operator notes only. Generated pac
 
 - `build-yukino.ps1`: copies the installed Codex Desktop package, patches branding and runtime assets, repacks `app.asar`, signs an MSIX, and can install it.
 - `verify-yukino.ps1`: checks the latest build output, installed package, config state, and recent app logs for the expected Yukino patches.
+- `assets/`: source images for Yukino app icons and the desktop sidebar background.
+- `scripts/`: helper scripts used by the rebuild workflow.
+- `tests/`: focused PowerShell checks for source asset generation and injected UI patches.
 - `MOD_NOTES.md`: patch inventory, build flow, verification notes, and known follow-ups.
 
 ## Build
@@ -61,3 +64,5 @@ Do not commit generated directories:
 - `logs/`
 
 These directories can contain many gigabytes of copied package contents and repeated extracted builds. If a generated artifact needs to be preserved, record its path and verification result in `MOD_NOTES.md` instead of committing the artifact.
+
+Do not commit local credentials or runtime identity files, including `.env`, `.yukino/`, `.codex/`, `auth.json`, `credentials.json`, or `*.credentials.json`.

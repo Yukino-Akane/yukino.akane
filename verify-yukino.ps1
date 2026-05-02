@@ -133,6 +133,47 @@ if ($latestBuild) {
         else {
             Add-Check "plugins-settings-entry" "WARN" "Expected settings entry pattern not found; upstream asset may have changed"
         }
+
+        $sidebarBackgroundAsset = Join-Path $assetsDir "yukino-sidebar-background.png"
+        $sidebarCssAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css")
+        $sidebarCssHasPatch = $false
+        $sidebarCssHasAspectSafeSizing = $false
+        $sidebarCssHasCenteredPortraitFraming = $false
+        $sidebarCssHasDistortedSizing = $false
+        $sidebarCssHasFullWindowCover = $false
+        foreach ($asset in $sidebarCssAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if ($text.Contains("/* Yukino sidebar background patch */") -and
+                $text.Contains("--yukino-sidebar-background-image") -and
+                $text.Contains("yukino-sidebar-background.png") -and
+                $text.Contains(".main-surface")) {
+                $sidebarCssHasPatch = $true
+            }
+            if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;")) {
+                $sidebarCssHasAspectSafeSizing = $true
+            }
+            if ($text.Contains("background-position: left top, calc(var(--yukino-sidebar-background-half-width) - var(--yukino-sidebar-portrait-half-width)) center;")) {
+                $sidebarCssHasCenteredPortraitFraming = $true
+            }
+            if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, var(--yukino-sidebar-background-width) 100%;")) {
+                $sidebarCssHasDistortedSizing = $true
+            }
+            if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, cover;")) {
+                $sidebarCssHasFullWindowCover = $true
+            }
+        }
+        if (-not (Test-Path -LiteralPath $sidebarBackgroundAsset)) {
+            Add-Check "sidebar-background-patch" "FAIL" "Missing sidebar background asset: $sidebarBackgroundAsset"
+        }
+        elseif (-not $sidebarCssHasPatch) {
+            Add-Check "sidebar-background-patch" "FAIL" "Missing sidebar background CSS patch in index-*.css"
+        }
+        elseif ($sidebarCssHasDistortedSizing -or $sidebarCssHasFullWindowCover -or -not $sidebarCssHasAspectSafeSizing -or -not $sidebarCssHasCenteredPortraitFraming) {
+            Add-Check "sidebar-background-patch" "FAIL" "Sidebar background CSS does not preserve the image aspect ratio"
+        }
+        else {
+            Add-Check "sidebar-background-patch" "PASS" $sidebarBackgroundAsset
+        }
     }
     else {
         Add-Check "webview-assets" "FAIL" "Missing assets directory: $assetsDir"
@@ -160,13 +201,35 @@ if ($installed) {
             else {
                 Add-Check "installed-agent-settings-patch" "FAIL" "Installed app.asar does not contain expected Agent Settings patch"
             }
+
+            & rg -a --fixed-strings --quiet -- "yukino-sidebar-background.png" $installedAsar
+            $installedHasSidebarBackground = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;" $installedAsar
+            $installedHasAspectSafeSidebarBackground = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "background-position: left top, calc(var(--yukino-sidebar-background-half-width) - var(--yukino-sidebar-portrait-half-width)) center;" $installedAsar
+            $installedHasCenteredPortraitSidebarBackground = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, var(--yukino-sidebar-background-width) 100%;" $installedAsar
+            $installedHasDistortedSidebarBackground = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, cover;" $installedAsar
+            $installedHasFullWindowCoverSidebarBackground = $LASTEXITCODE -eq 0
+            if (-not $installedHasSidebarBackground) {
+                Add-Check "installed-sidebar-background-patch" "FAIL" "Installed app.asar does not contain the Yukino sidebar background asset reference"
+            }
+            elseif ($installedHasDistortedSidebarBackground -or $installedHasFullWindowCoverSidebarBackground -or -not $installedHasAspectSafeSidebarBackground -or -not $installedHasCenteredPortraitSidebarBackground) {
+                Add-Check "installed-sidebar-background-patch" "FAIL" "Installed sidebar background CSS does not preserve the image aspect ratio"
+            }
+            else {
+                Add-Check "installed-sidebar-background-patch" "PASS" $installedAsar
+            }
         }
         else {
             Add-Check "installed-agent-settings-patch" "WARN" "rg is not available; skipped installed app.asar text probe"
+            Add-Check "installed-sidebar-background-patch" "WARN" "rg is not available; skipped installed sidebar background text probe"
         }
     }
     else {
         Add-Check "installed-agent-settings-patch" "FAIL" "Missing installed app.asar: $installedAsar"
+        Add-Check "installed-sidebar-background-patch" "FAIL" "Missing installed app.asar: $installedAsar"
     }
 }
 else {
