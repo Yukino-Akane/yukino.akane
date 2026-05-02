@@ -97,14 +97,26 @@ if ($latestBuild) {
             $text = [IO.File]::ReadAllText($asset.FullName)
             $gateMatches += [regex]::Matches($text, $gatePattern).Count
         }
-        if ($gradientAssets.Count -eq 0) {
-            Add-Check "plugin-auth-gate" "FAIL" "No gradient-*.js assets found in $assetsDir"
+        $skillsPageAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "skills-page-*.js")
+        $skillsPageHasOldGate = $false
+        $skillsPageHasPatchedGate = $false
+        foreach ($asset in $skillsPageAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!m")) {
+                $skillsPageHasOldGate = $true
+            }
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
+                $skillsPageHasPatchedGate = $true
+            }
         }
-        elseif ($gateMatches -eq 0) {
+        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and $skillsPageHasPatchedGate) {
+            Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page assets"
+        }
+        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate)) {
             Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient assets"
         }
         else {
-            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches API-key auth gate match(es) remain in gradient assets"
+            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es) and skills-page old gate=$skillsPageHasOldGate"
         }
 
         $oldSettingsEntry = 'case`plugins-settings`:return d===`extension`&&u;case`skills-settings`:return d===`extension`&&!u;'

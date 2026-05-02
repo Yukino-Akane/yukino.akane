@@ -184,16 +184,26 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
         return
     }
 
-    $pattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'
+    $legacyPattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'
     $patched = 0
     foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "gradient-*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
-        if ($text -notmatch $pattern) {
+        if ($text -notmatch $legacyPattern) {
             continue
         }
 
-        $text = [regex]::Replace($text, $pattern, 'function $1($2){return !1}', 1)
+        $text = [regex]::Replace($text, $legacyPattern, 'function $1($2){return !1}', 1)
         [IO.File]::WriteAllText($asset.FullName, $text, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "skills-page-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains("pluginsAuthBlockedToast.title") -or -not $text.Contains("s&&!m")) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $text.Replace("s&&!m", "s&&!1"), [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 
