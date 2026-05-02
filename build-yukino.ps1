@@ -6,7 +6,8 @@ param(
     [string]$IconSource = (Join-Path $PSScriptRoot "assets\yukino-icon-source.jpg"),
     [string]$SidebarBackgroundSource = (Join-Path $PSScriptRoot "assets\yukino-sidebar-background.png"),
     [switch]$Install,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$SkipSmoke
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,6 +67,33 @@ function Stop-YukinoProcessTree([int]$RootProcessId) {
     foreach ($id in @($ids | Select-Object -Unique | Sort-Object -Descending)) {
         Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Test-InstalledYukinoRunning([string]$PackageName, [string]$DisplayName) {
+    $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+    if (-not $installed) {
+        return $false
+    }
+
+    $installLocation = $installed.InstallLocation
+    if (-not $installLocation) {
+        return $false
+    }
+
+    $expectedExe = Join-Path $installLocation "app\$DisplayName.exe"
+    $expectedCodex = Join-Path $installLocation "app\resources\codex.exe"
+    $running = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.ExecutablePath -and (
+                $_.ExecutablePath.Equals($expectedExe, [StringComparison]::OrdinalIgnoreCase) -or
+                $_.ExecutablePath.Equals($expectedCodex, [StringComparison]::OrdinalIgnoreCase)
+            )
+        } |
+        Select-Object -First 1
+
+    return $null -ne $running
 }
 
 function Replace-Text([string]$Path, [string]$Old, [string]$New) {
@@ -531,14 +559,21 @@ else {
     throw "Could not parse ASAR integrity hash from $launchLog"
 }
 
-Write-Step "Smoke source launch"
-$process = Start-Process -FilePath $newExe -PassThru
-Start-Sleep -Seconds 8
-$process.Refresh()
-if ($process.HasExited) {
-    throw "Source Yukino process exited during smoke test."
+$installedYukinoRunning = Test-InstalledYukinoRunning -PackageName $PackageName -DisplayName $DisplayName
+if ($SkipSmoke -or $installedYukinoRunning) {
+    $reason = if ($SkipSmoke) { "-SkipSmoke was set" } else { "installed $DisplayName is running" }
+    Write-Host "Skipping source smoke launch because $reason." -ForegroundColor Yellow
 }
-Stop-YukinoProcessTree -RootProcessId $process.Id
+else {
+    Write-Step "Smoke source launch"
+    $process = Start-Process -FilePath $newExe -PassThru
+    Start-Sleep -Seconds 8
+    $process.Refresh()
+    if ($process.HasExited) {
+        throw "Source Yukino process exited during smoke test."
+    }
+    Stop-YukinoProcessTree -RootProcessId $process.Id
+}
 
 Write-Step "Pack and sign MSIX"
 $makeappx = Resolve-SdkTool "makeappx.exe"

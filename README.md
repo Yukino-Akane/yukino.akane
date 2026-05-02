@@ -39,6 +39,12 @@ To install after building:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build-yukino.ps1 -Install
 ```
 
+If Yukino is currently running, the build script skips the temporary source smoke launch so it does not interrupt the active desktop session. You can also skip that smoke launch explicitly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-yukino.ps1 -SkipSmoke
+```
+
 The script resolves the currently installed `OpenAI.Codex` package and emits a target version whose revision is one higher than the source package revision.
 
 ## Verify

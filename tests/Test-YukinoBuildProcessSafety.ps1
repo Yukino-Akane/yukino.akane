@@ -16,6 +16,10 @@ function Assert-True([bool]$Condition, [string]$Message) {
 Assert-True (Test-Path -LiteralPath $buildScript) "Missing build script: $buildScript"
 
 $scriptText = [IO.File]::ReadAllText($buildScript)
+Assert-True $scriptText.Contains('[switch]$SkipSmoke') "Build script should expose -SkipSmoke for release builds run from an active Yukino session."
+Assert-True $scriptText.Contains("Test-InstalledYukinoRunning") "Build script should detect whether the installed Yukino app is already running."
+Assert-True $scriptText.Contains('$installedYukinoRunning = Test-InstalledYukinoRunning') "Build script should compute installed Yukino activity before source smoke testing."
+Assert-True $scriptText.Contains('Skipping source smoke launch') "Build script should skip source smoke testing when -SkipSmoke is set or installed Yukino is running."
 Assert-True $scriptText.Contains("Stop-YukinoProcessTree") "Build script should stop only a targeted process tree."
 Assert-True $scriptText.Contains('Start-Process -FilePath $newExe -PassThru') "Build script should track the smoke-test process it starts."
 Assert-True $scriptText.Contains('Stop-YukinoProcessTree -RootProcessId $process.Id') "Build script should stop the smoke-test process by PID, not by app name."
