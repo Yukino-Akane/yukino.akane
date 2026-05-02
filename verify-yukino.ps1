@@ -13,6 +13,8 @@ Set-StrictMode -Version Latest
 $checks = New-Object System.Collections.Generic.List[object]
 $staleAgentSettingsWrite = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,mergeStrategy:`upsert`,filePath:z.filePath,expectedVersion:z.expectedVersion})'
 $patchedAgentSettingsWrite = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
+$sidebarPluginGateRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*&&[A-Za-z_$][A-Za-z0-9_$]*'
+$sidebarPluginGatePatchedRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=!1,[A-Za-z_$][A-Za-z0-9_$]*=!1'
 
 function Add-Check([string]$Name, [string]$Status, [string]$Detail) {
     $checks.Add([pscustomobject]@{
@@ -109,14 +111,33 @@ if ($latestBuild) {
                 $skillsPageHasPatchedGate = $true
             }
         }
-        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and $skillsPageHasPatchedGate) {
-            Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page assets"
+
+        $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=\k<featureFlag>&&\k<gate>'
+        $sidebarPatchedPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=!1,(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=!1'
+        $indexAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.js")
+        $sidebarHasOldGate = $false
+        $sidebarHasPatchedGate = $false
+        foreach ($asset in $indexAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if (-not $text.Contains("pluginsDisabledTooltip")) {
+                continue
+            }
+            if ([regex]::IsMatch($text, $sidebarPattern)) {
+                $sidebarHasOldGate = $true
+            }
+            if ([regex]::IsMatch($text, $sidebarPatchedPattern)) {
+                $sidebarHasPatchedGate = $true
+            }
         }
-        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate)) {
-            Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient assets"
+
+        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and $skillsPageHasPatchedGate -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
+            Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page and sidebar assets"
+        }
+        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $sidebarHasOldGate)) {
+            Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient or sidebar assets"
         }
         else {
-            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es) and skills-page old gate=$skillsPageHasOldGate"
+            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
         }
 
         $oldSettingsEntry = 'case`plugins-settings`:return d===`extension`&&u;case`skills-settings`:return d===`extension`&&!u;'
@@ -214,6 +235,20 @@ if ($installed) {
                 Add-Check "installed-agent-settings-patch" "FAIL" "Installed app.asar does not contain expected Agent Settings patch"
             }
 
+            & rg -a --pcre2 --quiet -- $sidebarPluginGateRegex $installedAsar
+            $installedHasSidebarPluginGate = $LASTEXITCODE -eq 0
+            & rg -a --pcre2 --quiet -- $sidebarPluginGatePatchedRegex $installedAsar
+            $installedHasPatchedSidebarPluginGate = $LASTEXITCODE -eq 0
+            if ($installedHasPatchedSidebarPluginGate -and -not $installedHasSidebarPluginGate) {
+                Add-Check "installed-plugin-auth-gate" "PASS" $installedAsar
+            }
+            elseif ($installedHasSidebarPluginGate) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed app.asar still contains the disabled Plugins sidebar gate; install the latest MSIX to apply the fix"
+            }
+            else {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed app.asar does not contain the expected patched Plugins sidebar gate"
+            }
+
             & rg -a --fixed-strings --quiet -- "yukino-sidebar-background.png" $installedAsar
             $installedHasSidebarBackground = $LASTEXITCODE -eq 0
             & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;" $installedAsar
@@ -236,11 +271,13 @@ if ($installed) {
         }
         else {
             Add-Check "installed-agent-settings-patch" "WARN" "rg is not available; skipped installed app.asar text probe"
+            Add-Check "installed-plugin-auth-gate" "WARN" "rg is not available; skipped installed plugin auth gate text probe"
             Add-Check "installed-sidebar-background-patch" "WARN" "rg is not available; skipped installed sidebar background text probe"
         }
     }
     else {
         Add-Check "installed-agent-settings-patch" "FAIL" "Missing installed app.asar: $installedAsar"
+        Add-Check "installed-plugin-auth-gate" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-sidebar-background-patch" "FAIL" "Missing installed app.asar: $installedAsar"
     }
 }

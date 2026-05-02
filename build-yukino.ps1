@@ -263,6 +263,29 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
         $patched += 1
     }
 
+    $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=\k<featureFlag>&&\k<gate>'
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains("pluginsDisabledTooltip") -or -not $text.Contains("authMethod:") -or -not $text.Contains("533078438")) {
+            continue
+        }
+
+        $sidebarRegex = [regex]::new($sidebarPattern)
+        $newText = $sidebarRegex.Replace($text, {
+            param($match)
+            $prefix = $match.Groups["prefix"].Value
+            $gate = $match.Groups["gate"].Value
+            $disabledNav = $match.Groups["disabledNav"].Value
+            "${prefix}${gate}=!1,${disabledNav}=!1"
+        }, 1)
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
     if ($patched -eq 0) {
         throw "Cannot find plugin API-key auth gate in webview assets."
     }
