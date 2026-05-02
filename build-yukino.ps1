@@ -40,6 +40,34 @@ function Remove-PathSafe([string]$Path, [string]$AllowedRoot) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
+function Stop-YukinoProcessTree([int]$RootProcessId) {
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $childrenByParent = @{}
+    foreach ($process in $processes) {
+        if (-not $childrenByParent.ContainsKey($process.ParentProcessId)) {
+            $childrenByParent[$process.ParentProcessId] = New-Object System.Collections.Generic.List[object]
+        }
+        $childrenByParent[$process.ParentProcessId].Add($process)
+    }
+
+    $ids = New-Object System.Collections.Generic.List[int]
+    $queue = New-Object System.Collections.Generic.Queue[int]
+    $queue.Enqueue($RootProcessId)
+    while ($queue.Count -gt 0) {
+        $id = $queue.Dequeue()
+        $ids.Add($id)
+        if ($childrenByParent.ContainsKey($id)) {
+            foreach ($child in $childrenByParent[$id]) {
+                $queue.Enqueue([int]$child.ProcessId)
+            }
+        }
+    }
+
+    foreach ($id in @($ids | Select-Object -Unique | Sort-Object -Descending)) {
+        Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Replace-Text([string]$Path, [string]$Old, [string]$New) {
     $text = [IO.File]::ReadAllText($Path)
     $count = [regex]::Matches($text, [regex]::Escape($Old)).Count
@@ -504,19 +532,13 @@ else {
 }
 
 Write-Step "Smoke source launch"
-Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "$DisplayName.exe" } | ForEach-Object {
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-}
-Start-Sleep -Seconds 2
 $process = Start-Process -FilePath $newExe -PassThru
 Start-Sleep -Seconds 8
 $process.Refresh()
 if ($process.HasExited) {
     throw "Source Yukino process exited during smoke test."
 }
-Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $newExe } | ForEach-Object {
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-}
+Stop-YukinoProcessTree -RootProcessId $process.Id
 
 Write-Step "Pack and sign MSIX"
 $makeappx = Resolve-SdkTool "makeappx.exe"
@@ -557,6 +579,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if ($Install) {
     Write-Step "Install Yukino package"
+    Write-Host "Install mode will close the installed $DisplayName package before replacing it." -ForegroundColor Yellow
     Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "$DisplayName.exe" -or ($_.Name -eq "codex.exe" -and $_.ExecutablePath -like "*$PackageName*") } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
