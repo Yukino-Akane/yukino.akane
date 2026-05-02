@@ -55,6 +55,16 @@ The latest known verification keeps the `[windows] sandbox` value as a compatibi
 - `features.plugins = true`
 - `browser-use@openai-bundled` enabled
 
+## Install From A Private Release
+
+Download the MSIX package, `Yukino.cer`, `SHA256SUMS.txt`, and `Install-YukinoRelease.ps1` from the private GitHub release, then run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-YukinoRelease.ps1
+```
+
+Run PowerShell as administrator if you want the signing certificate installed for all users. Without administrator privileges, the script imports the certificate into the current user's certificate stores.
+
 ## Repository Policy
 
 Do not commit generated directories:
