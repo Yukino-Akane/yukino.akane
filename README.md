@@ -8,12 +8,12 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 
 ## Current State
 
-- Source package: installed `OpenAI.Codex`, latest observed version `26.429.2026.0`.
+- Source package: installed `OpenAI.Codex`, latest observed version `26.429.3425.0`.
 - Target package: `yukino.akane`.
 - Display name: `Yukino`.
 - Publisher: `CN=Yukino`.
-- Latest built package: `out/yukino.akane_26.429.2026.1_x64.msix`.
-- Latest installed package observed: `yukino.akane_26.429.2026.1_x64__fnxqm6pztzbs0`.
+- Latest built package: `out/yukino.akane_26.429.3425.1_x64.msix`.
+- Latest installed package observed: `yukino.akane_26.429.3425.1_x64__fnxqm6pztzbs0`.
 - Config home: `%USERPROFILE%\.yukino`.
 
 ## Files
@@ -70,6 +70,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-YukinoRelease.ps1
 ```
 
 Run PowerShell as administrator if you want the signing certificate installed for all users. Without administrator privileges, the script imports the certificate into the current user's certificate stores.
+
+## Publish A Private Release
+
+After a build has produced `out/yukino.akane_<version>_x64.msix`, prepare release assets and run verification without touching GitHub:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRelease.ps1 -Tag v<version>-yukino.<n> -DryRun
+```
+
+When the dry-run output looks right, publish the release:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRelease.ps1 -Tag v<version>-yukino.<n> -Title "Yukino Codex <version>-yukino.<n>" -Latest
+```
+
+The publish script recalculates `SHA256SUMS.txt`, copies `Install-YukinoRelease.ps1` into `out/`, writes release notes, runs `verify-yukino.ps1`, and uploads the MSIX, certificate, checksum file, and installer through `gh release create`.
 
 ## Repository Policy
 

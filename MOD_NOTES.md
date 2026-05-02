@@ -14,9 +14,9 @@ This workspace rebuilds the installed Codex Desktop Windows package into a separ
 
 At the time this note was written, generated data under this workspace was about 12 GB:
 
-- `out/`: about 6.1 GB.
-- `logs/`: about 4.2 GB.
-- `src_unpacked/`: about 1.1 GB.
+- `out/`: can grow to multiple gigabytes because it contains MSIX packages and unpack verification output.
+- `logs/`: can grow to multiple gigabytes because each build keeps an extracted ASAR work directory.
+- `src_unpacked/`: about 1 GB for a copied desktop package tree.
 
 ## Build Flow
 
@@ -36,6 +36,18 @@ At the time this note was written, generated data under this workspace was about
 12. Pack and sign the MSIX with Windows SDK tools.
 13. Unpack the MSIX for structure verification.
 14. Optionally install and run `verify-yukino.ps1`.
+
+## Release Flow
+
+`scripts\Publish-YukinoRelease.ps1` turns the latest built MSIX into a private GitHub release:
+
+1. Resolve the latest `out\yukino.akane_*_x64.msix`, `out\Yukino.cer`, and `scripts\Install-YukinoRelease.ps1`.
+2. Copy the installer into `out\`.
+3. Recompute `out\SHA256SUMS.txt` from the MSIX so stale checksums cannot be uploaded.
+4. Generate release notes under `out\release-notes-<tag>.md` unless an explicit notes path is provided.
+5. Run `verify-yukino.ps1`; publishing stops if verification fails.
+6. In dry-run mode, print the assets without touching GitHub.
+7. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
 
 ## Patch Inventory
 
@@ -74,20 +86,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260501-220708`.
+- `latest-build`: PASS, `logs\build-20260502-142726`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `plugins-settings-entry`: PASS.
-- `installed-package`: PASS, `yukino.akane_26.429.2026.1_x64__fnxqm6pztzbs0`.
+- `installed-package`: PASS, `yukino.akane_26.429.3425.1_x64__fnxqm6pztzbs0`.
 - `installed-agent-settings-patch`: PASS.
-- `latest-msix`: PASS, `out\yukino.akane_26.429.2026.1_x64.msix`.
+- `installed-plugin-auth-gate`: PASS.
+- `latest-msix`: PASS, `out\yukino.akane_26.429.3425.1_x64.msix`.
 - `config-approval-policy`: PASS, `approval_policy=never`.
 - `config-sandbox-mode`: PASS, `sandbox_mode=danger-full-access`.
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
-- `latest-batch-write-log`: PASS.
-- `recent-config-conflicts`: PASS, historical conflicts only.
+- `latest-batch-write-log`: WARN when no recent config write occurred.
+- `recent-config-conflicts`: PASS.
 
 Sandbox compatibility note:
 
@@ -111,6 +124,18 @@ Verify current build and installed package:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
+```
+
+Prepare release assets without publishing:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRelease.ps1 -Tag v<version>-yukino.<n> -DryRun
+```
+
+Publish a private GitHub release:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRelease.ps1 -Tag v<version>-yukino.<n> -Title "Yukino Codex <version>-yukino.<n>" -Latest
 ```
 
 Check installed source and target packages:
