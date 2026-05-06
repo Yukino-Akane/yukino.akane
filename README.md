@@ -8,12 +8,12 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 
 ## Current State
 
-- Source package: installed `OpenAI.Codex`, latest observed version `26.429.3425.0`.
+- Source package: installed `OpenAI.Codex`, latest observed version `26.429.8261.0`.
 - Target package: `yukino.akane`.
 - Display name: `Yukino`.
 - Publisher: `CN=Yukino`.
-- Latest built package: `out/yukino.akane_26.429.3425.1_x64.msix`.
-- Latest installed package observed: `yukino.akane_26.429.3425.1_x64__fnxqm6pztzbs0`.
+- Latest built package: `out/yukino.akane_26.429.8261.1_x64.msix`.
+- Latest installed package observed: `yukino.akane_26.429.8261.1_x64__fnxqm6pztzbs0`.
 - Config home: `%USERPROFILE%\.yukino`.
 
 ## Files
@@ -55,8 +55,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 The latest known verification keeps the `[windows] sandbox` value as a compatibility check because the current desktop runtime may still require it. The active top-level config values were valid:
 
-- `approval_policy = "never"`
-- `sandbox_mode = "danger-full-access"`
+- `approval_policy = "on-request"`
+- `sandbox_mode = "workspace-write"`
 - `[windows] sandbox = "elevated"`
 - `features.plugins = true`
 - `browser-use@openai-bundled` enabled

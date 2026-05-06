@@ -86,16 +86,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260502-142726`.
+- `latest-build`: PASS, `logs\build-20260506-160259`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `plugins-settings-entry`: PASS.
-- `installed-package`: PASS, `yukino.akane_26.429.3425.1_x64__fnxqm6pztzbs0`.
+- `installed-package`: PASS, `yukino.akane_26.429.8261.1_x64__fnxqm6pztzbs0`.
 - `installed-agent-settings-patch`: PASS.
 - `installed-plugin-auth-gate`: PASS.
-- `latest-msix`: PASS, `out\yukino.akane_26.429.3425.1_x64.msix`.
-- `config-approval-policy`: PASS, `approval_policy=never`.
-- `config-sandbox-mode`: PASS, `sandbox_mode=danger-full-access`.
+- `latest-msix`: PASS, `out\yukino.akane_26.429.8261.1_x64.msix`.
+- `config-approval-policy`: PASS, `approval_policy=on-request`.
+- `config-sandbox-mode`: PASS, `sandbox_mode=workspace-write`.
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
