@@ -259,7 +259,7 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
             continue
         }
 
-        [IO.File]::WriteAllText($asset.FullName, $text.Replace("s&&!m", "s&&!1"), [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($asset.FullName, $text.Replace("s&&!m", "s&&!0"), [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 

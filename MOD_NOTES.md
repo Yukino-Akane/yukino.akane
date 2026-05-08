@@ -68,7 +68,7 @@ Feature and settings patches:
 
 - Filters unsupported experimental feature sync entries from webview entry assets.
 - Disables the ChatGPT-only API-key gate in `gradient-*.js`, `skills-page-*.js`, and current `app-main-*.js` webview assets.
-- Patches the combined sidebar Plugins/Skills click route so the desktop `Plugins` label opens `/plugins` instead of `/skills`.
+- Patches the combined sidebar Plugins/Skills click route so the desktop `Plugins` label opens `/plugins` with `initialMode=browse` and `initialTab=plugins`, avoiding the shared page's default Skills tab.
 - Enables the desktop plugins settings entry in `settings-page-*.js`.
 - Rewrites Agent Settings config writes from `write-config-value` to `batch-write-config-value` with reload enabled.
 - Supports the current `app-main-*.css` bundle for the Yukino sidebar background patch.
@@ -88,7 +88,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260508-231224`.
+- `latest-build`: PASS, `logs\build-20260509-005153`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `sidebar-plugin-route`: PASS.
@@ -103,8 +103,7 @@ Latest observed result:
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
-- `latest-batch-write-log`: WARN when no recent config write occurred.
-- `recent-config-conflicts`: WARN when older conflict-related log lines are still in the latest sampled logs.
+- `app-log-dir`: WARN when the newly installed app has not produced a log directory for today yet.
 
 Sandbox compatibility note:
 

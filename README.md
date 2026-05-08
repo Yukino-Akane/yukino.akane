@@ -61,7 +61,7 @@ The latest known verification keeps the `[windows] sandbox` value as a compatibi
 - `features.plugins = true`
 - `browser-use@openai-bundled` enabled
 
-For Codex Desktop `26.506.2212.0`, the rebuild also patches the combined sidebar `Plugins` nav item so it opens the real `/plugins` page instead of the `/skills` page when the desktop route flag labels that item as Plugins.
+For Codex Desktop `26.506.2212.0`, the rebuild also patches the combined sidebar `Plugins` nav item so it opens the `/plugins` route with the Plugins browse tab selected instead of falling through to the default Skills tab when the desktop route flag labels that item as Plugins.
 
 ## Install From A Private Release
 

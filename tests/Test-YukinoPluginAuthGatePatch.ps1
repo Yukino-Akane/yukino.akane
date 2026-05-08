@@ -20,7 +20,8 @@ Assert-True (Test-Path -LiteralPath $verifyScript) "Missing verify script: $veri
 $scriptText = [IO.File]::ReadAllText($buildScript)
 Assert-True $scriptText.Contains("skills-page-*.js") "Plugin auth gate patch should scan the new skills-page bundle used by current Codex Desktop builds."
 Assert-True $scriptText.Contains('s&&!m') "Plugin auth gate patch should recognize the current skills page API-key guard shape."
-Assert-True $scriptText.Contains('s&&!1') "Plugin auth gate patch should disable the current skills page API-key guard without disabling the whole page."
+Assert-True $scriptText.Contains('s&&!0') "Plugin auth gate patch should keep the Plugins page entry enabled while bypassing the API-key guard."
+Assert-True (-not $scriptText.Contains('s&&!1')) "Plugin auth gate patch must not replace the Plugins page entry with a permanently false condition."
 Assert-True $scriptText.Contains("gradient-*.js") "Plugin auth gate patch should retain the older gradient bundle patch for older Codex Desktop builds."
 Assert-True $scriptText.Contains("pluginsAuthBlockedToast.title") "Plugin auth gate patch should anchor the current bundle patch near the plugin auth blocked toast."
 Assert-True $scriptText.Contains("index-*.js") "Plugin auth gate patch should scan the main webview bundle for the sidebar Plugins nav gate."
@@ -41,6 +42,8 @@ Assert-True $verifyText.Contains('$sidebarPluginGateRegex') "Verification should
 Assert-True $verifyText.Contains('$sidebarPluginGatePatchedRegex') "Verification should recognize the patched installed sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginHandlerRouteRegex') "Verification should recognize the current sidebar Plugins click-handler route shape."
 Assert-True $verifyText.Contains('$sidebarPluginHandlerRoutePatchedRegex') "Verification should recognize the patched current sidebar Plugins click-handler route shape."
+Assert-True $verifyText.Contains('s&&!0') "Verification should require the Plugins page entry to stay enabled for API-key users."
+Assert-True $verifyText.Contains('s&&!1') "Verification should reject installed bundles that permanently disable the Plugins page entry."
 Assert-True $verifyText.Contains('sidebar-plugin-route') "Verification should check that the latest extracted webview sidebar opens the real Plugins page."
 Assert-True $verifyText.Contains('installed-sidebar-plugin-route') "Verification should check that the installed app.asar opens the real Plugins page from the sidebar."
 

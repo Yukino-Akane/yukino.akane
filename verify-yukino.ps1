@@ -21,6 +21,8 @@ $sidebarPluginRouteRegex = 'metadata:\{item:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_
 $sidebarPluginRoutePatchedRegex = 'metadata:\{item:[A-Za-z_$][A-Za-z0-9_$]*\?`plugins`:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\?`/plugins`:`/skills`\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\([A-Za-z_$][A-Za-z0-9_$]*\?`/plugins`:`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 $sidebarPluginHandlerRouteRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,\{eventName:`nav_clicked`,metadata:\{item:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(`/skills`\)\}.*?onClick:\(\)=>\{\k<handler>\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 $sidebarPluginHandlerRoutePatchedRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,\{eventName:`nav_clicked`,metadata:\{item:\k<routeFlag>\?`plugins`:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(\k<routeFlag>\?`/plugins`:`/skills`\)\}.*?onClick:\(\)=>\{\k<handler>\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,\k<routeFlag>\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$sidebarPluginRouteCurrentRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$sidebarPluginRouteCurrentPatchedRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 
 function Add-Check([string]$Name, [string]$Status, [string]$Detail) {
     $checks.Add([pscustomobject]@{
@@ -112,13 +114,17 @@ if ($latestBuild) {
         $skillsPageAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "skills-page-*.js")
         $skillsPageHasOldGate = $false
         $skillsPageHasPatchedGate = $false
+        $skillsPageHasDisabledPluginPage = $false
         foreach ($asset in $skillsPageAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
             if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!m")) {
                 $skillsPageHasOldGate = $true
             }
-            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!0")) {
                 $skillsPageHasPatchedGate = $true
+            }
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
+                $skillsPageHasDisabledPluginPage = $true
             }
         }
 
@@ -143,14 +149,14 @@ if ($latestBuild) {
             }
         }
 
-        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and $skillsPageHasPatchedGate -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
+        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedGate -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
             Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page and sidebar assets"
         }
-        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $sidebarHasOldGate)) {
+        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and (-not $sidebarHasOldGate)) {
             Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient or sidebar assets"
         }
         else {
-            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
+            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, skills-page disabled plugin page=$skillsPageHasDisabledPluginPage, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
         }
 
         $sidebarHasOldPluginRoute = $false
@@ -160,10 +166,10 @@ if ($latestBuild) {
             if (-not $text.Contains("sidebarElectron.skillsAppsRouteNavLink")) {
                 continue
             }
-            if ([regex]::IsMatch($text, $sidebarPluginRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRouteRegex)) {
+            if ([regex]::IsMatch($text, $sidebarPluginRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginRouteCurrentRegex)) {
                 $sidebarHasOldPluginRoute = $true
             }
-            if ([regex]::IsMatch($text, $sidebarPluginRoutePatchedRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRoutePatchedRegex)) {
+            if ([regex]::IsMatch($text, $sidebarPluginRoutePatchedRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRoutePatchedRegex) -or [regex]::IsMatch($text, $sidebarPluginRouteCurrentPatchedRegex)) {
                 $sidebarHasPatchedPluginRoute = $true
             }
         }
@@ -287,7 +293,19 @@ if ($installed) {
             $installedHasSidebarPluginGate = $LASTEXITCODE -eq 0
             & rg -a --pcre2 --quiet -- $sidebarPluginGatePatchedRegex $installedAsar
             $installedHasPatchedSidebarPluginGate = $LASTEXITCODE -eq 0
-            if ($installedHasPatchedSidebarPluginGate -and -not $installedHasSidebarPluginGate) {
+            & rg -a --fixed-strings --quiet -- "pluginsAuthBlockedToast.title" $installedAsar
+            $installedHasSkillsPageAuthToast = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "s&&!0" $installedAsar
+            $installedHasPatchedSkillsPageGate = $LASTEXITCODE -eq 0
+            & rg -a --fixed-strings --quiet -- "s&&!1" $installedAsar
+            $installedHasDisabledSkillsPageGate = $LASTEXITCODE -eq 0
+            if ($installedHasSkillsPageAuthToast -and (-not $installedHasPatchedSkillsPageGate)) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle does not contain the expected s&&!0 Plugins page entry patch"
+            }
+            elseif ($installedHasSkillsPageAuthToast -and $installedHasDisabledSkillsPageGate) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle disables the Plugins page entry with s&&!1; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedHasPatchedSidebarPluginGate -and -not $installedHasSidebarPluginGate) {
                 Add-Check "installed-plugin-auth-gate" "PASS" $installedAsar
             }
             elseif ($installedHasSidebarPluginGate) {
@@ -303,10 +321,18 @@ if ($installed) {
                 & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRouteRegex $installedAsar
                 $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
             }
+            if (-not $installedHasSidebarPluginRoute) {
+                & rg -a --pcre2 --quiet -- $sidebarPluginRouteCurrentRegex $installedAsar
+                $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
+            }
             & rg -a --pcre2 --quiet -- $sidebarPluginRoutePatchedRegex $installedAsar
             $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
             if (-not $installedHasPatchedSidebarPluginRoute) {
                 & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRoutePatchedRegex $installedAsar
+                $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
+            }
+            if (-not $installedHasPatchedSidebarPluginRoute) {
+                & rg -a --pcre2 --quiet -- $sidebarPluginRouteCurrentPatchedRegex $installedAsar
                 $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
             }
             if ($installedHasPatchedSidebarPluginRoute -and -not $installedHasSidebarPluginRoute) {
