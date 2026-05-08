@@ -263,8 +263,12 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
         $patched += 1
     }
 
-    $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=\k<featureFlag>&&\k<gate>'
-    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js") {
+    $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=(?:[A-Za-z_$][A-Za-z0-9_$]*&&)?\k<featureFlag>&&\k<gate>'
+    $sidebarAssets = @(
+        Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js"
+        Get-ChildItem -LiteralPath $AssetsDir -File -Filter "app-main-*.js"
+    ) | Sort-Object FullName -Unique
+    foreach ($asset in $sidebarAssets) {
         $text = [IO.File]::ReadAllText($asset.FullName)
         if (-not $text.Contains("pluginsDisabledTooltip") -or -not $text.Contains("authMethod:") -or -not $text.Contains("533078438")) {
             continue
@@ -293,21 +297,113 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
     Write-Host "Disabled ChatGPT-only plugin auth gate in $patched webview asset file(s)"
 }
 
+function Patch-PluginSidebarRoute([string]$AssetsDir) {
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        return
+    }
+
+    $inlineRoutePattern = 'metadata:\{item:`skills`\}\}\),(?<navigate>[A-Za-z_$][A-Za-z0-9_$]*)\(`/skills`\)\},isActive:(?<location>[A-Za-z_$][A-Za-z0-9_$]*)\.pathname\.startsWith\(`/skills`\),label:(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+    $handlerRoutePattern = 'onClick:\(\)=>\{(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\((?<scope>[A-Za-z_$][A-Za-z0-9_$]*),(?<navigate>[A-Za-z_$][A-Za-z0-9_$]*)\)\},isActive:(?<location>[A-Za-z_$][A-Za-z0-9_$]*)\.pathname\.startsWith\(`/skills`\),label:(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+    $patched = 0
+    $routeAssets = @(
+        Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js"
+        Get-ChildItem -LiteralPath $AssetsDir -File -Filter "app-main-*.js"
+    ) | Sort-Object FullName -Unique
+    foreach ($asset in $routeAssets) {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains("sidebarElectron.skillsAppsRouteNavLink")) {
+            continue
+        }
+
+        $newText = $text
+        $inlineMatch = [regex]::Match($newText, $inlineRoutePattern)
+        if ($inlineMatch.Success) {
+            $navigate = $inlineMatch.Groups["navigate"].Value
+            $location = $inlineMatch.Groups["location"].Value
+            $routeFlag = $inlineMatch.Groups["routeFlag"].Value
+            $old = 'metadata:{item:`skills`}}),' + $navigate + '(`/skills`)},isActive:' + $location + '.pathname.startsWith(`/skills`),label:' + $routeFlag + '?'
+            $new = 'metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $navigate + '(' + $routeFlag + '?`/plugins`:`/skills`)},isActive:' + $location + '.pathname.startsWith(' + $routeFlag + '?`/plugins`:`/skills`),label:' + $routeFlag + '?'
+            $newText = $newText.Replace($inlineMatch.Value, $inlineMatch.Value.Replace($old, $new))
+        }
+
+        $handlerRouteMatch = [regex]::Match($newText, $handlerRoutePattern)
+        if ($handlerRouteMatch.Success) {
+            $match = $handlerRouteMatch
+            $handler = $match.Groups["handler"].Value
+            $scope = $match.Groups["scope"].Value
+            $navigate = $match.Groups["navigate"].Value
+            $location = $match.Groups["location"].Value
+            $routeFlag = $match.Groups["routeFlag"].Value
+            $handlerDefinitionPattern = 'function\s+' + [regex]::Escape($handler) + '\((?<handlerScope>[A-Za-z_$][A-Za-z0-9_$]*),(?<handlerNavigate>[A-Za-z_$][A-Za-z0-9_$]*)\)\{(?<logger>[A-Za-z_$][A-Za-z0-9_$]*)\(\k<handlerScope>,\{eventName:`nav_clicked`,metadata:\{item:`skills`\}\}\),\k<handlerNavigate>\(`/skills`\)\}'
+            $handlerMatch = [regex]::Match($newText, $handlerDefinitionPattern)
+            if (-not $handlerMatch.Success) {
+                throw "Cannot find sidebar Plugins route handler $handler in $($asset.Name)."
+            }
+
+            $handlerScope = $handlerMatch.Groups["handlerScope"].Value
+            $handlerNavigate = $handlerMatch.Groups["handlerNavigate"].Value
+            $logger = $handlerMatch.Groups["logger"].Value
+            $newHandler = 'function ' + $handler + '(' + $handlerScope + ',' + $handlerNavigate + ',' + $routeFlag + '){' + $logger + '(' + $handlerScope + ',{eventName:`nav_clicked`,metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $handlerNavigate + '(' + $routeFlag + '?`/plugins`:`/skills`)}'
+            $newText = [regex]::new($handlerDefinitionPattern).Replace($newText, {
+                param($handlerDefinitionMatch)
+                $newHandler
+            }, 1)
+
+            $old = 'onClick:()=>{' + $handler + '(' + $scope + ',' + $navigate + ')},isActive:' + $location + '.pathname.startsWith(`/skills`),label:' + $routeFlag + '?'
+            $new = 'onClick:()=>{' + $handler + '(' + $scope + ',' + $navigate + ',' + $routeFlag + ')},isActive:' + $location + '.pathname.startsWith(' + $routeFlag + '?`/plugins`:`/skills`),label:' + $routeFlag + '?'
+            $newText = $newText.Replace($match.Value, $match.Value.Replace($old, $new))
+        }
+
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -eq 0) {
+        throw "Cannot find sidebar Plugins route in webview assets."
+    }
+
+    Write-Host "Patched sidebar Plugins route in $patched webview asset file(s)"
+}
+
 function Patch-AgentSettingsConfigWrites([string]$AssetsDir) {
     if (-not (Test-Path -LiteralPath $AssetsDir)) {
         return
     }
 
-    $old = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,mergeStrategy:`upsert`,filePath:z.filePath,expectedVersion:z.expectedVersion})'
-    $new = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
+    $legacyOld = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,mergeStrategy:`upsert`,filePath:z.filePath,expectedVersion:z.expectedVersion})'
+    $legacyNew = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
+    $configWritePattern = '(?<caller>[A-Za-z_$][A-Za-z0-9_$]*)\(`write-config-value`,\{hostId:(?<hostId>[A-Za-z_$][A-Za-z0-9_$]*),keyPath:(?<keyPath>[A-Za-z_$][A-Za-z0-9_$]*),value:(?<value>[A-Za-z_$][A-Za-z0-9_$]*),mergeStrategy:`upsert`,filePath:(?<filePath>[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?),expectedVersion:(?<expectedVersion>[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\}\)'
     $patched = 0
     foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "agent-settings-*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
-        if (-not $text.Contains($old)) {
+        if (-not $text.Contains("write-config-value")) {
             continue
         }
 
-        [IO.File]::WriteAllText($asset.FullName, $text.Replace($old, $new), [Text.UTF8Encoding]::new($false))
+        if ($text.Contains($legacyOld)) {
+            $newText = $text.Replace($legacyOld, $legacyNew)
+        }
+        else {
+            $configWriteRegex = [regex]::new($configWritePattern)
+            $newText = $configWriteRegex.Replace($text, {
+                param($match)
+                $caller = $match.Groups["caller"].Value
+                $hostId = $match.Groups["hostId"].Value
+                $keyPath = $match.Groups["keyPath"].Value
+                $value = $match.Groups["value"].Value
+                $filePath = $match.Groups["filePath"].Value
+                $caller + '(`batch-write-config-value`,{hostId:' + $hostId + ',edits:[{keyPath:' + $keyPath + ',value:' + $value + ',mergeStrategy:`upsert`}],filePath:' + $filePath + ',expectedVersion:null,reloadUserConfig:!0})'
+            }, 1)
+        }
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 
@@ -331,7 +427,11 @@ function Patch-WebviewSidebarBackground([string]$ExtractDir, [string]$SourceImag
     $assetName = "yukino-sidebar-background.png"
     Copy-Item -LiteralPath $SourceImage -Destination (Join-Path $assetsDir $assetName) -Force
 
-    $cssFile = Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css" |
+    $cssFile = @(
+        Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css"
+        Get-ChildItem -LiteralPath $assetsDir -File -Filter "app-main-*.css"
+    ) |
+        Sort-Object FullName -Unique |
         Where-Object {
             $css = [IO.File]::ReadAllText($_.FullName)
             $css.Contains(".main-surface") -and $css.Contains("--color-token-side-bar-background")
@@ -434,6 +534,7 @@ function Patch-BuildJs([string]$ExtractDir, [string]$SidebarBackgroundSource) {
 
     Patch-UnsupportedExperimentalFeatureSync -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-PluginAuthGate -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-PluginSidebarRoute -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-AgentSettingsConfigWrites -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-WebviewSidebarBackground -ExtractDir $ExtractDir -SourceImage $SidebarBackgroundSource
 

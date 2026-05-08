@@ -29,10 +29,19 @@ Assert-True $scriptText.Contains('authMethod:') "Plugin auth gate patch should r
 Assert-True $scriptText.Contains('533078438') "Plugin auth gate patch should anchor the sidebar auth guard near the current Plugins feature flag."
 Assert-True $scriptText.Contains('${prefix}${gate}=!1') "Plugin auth gate patch should force the sidebar plugin auth-block flag false."
 Assert-True $scriptText.Contains('$sidebarRegex.Replace') "Plugin auth gate patch should use the Regex instance replace overload for evaluator replacement."
+Assert-True $scriptText.Contains("Patch-PluginSidebarRoute") "Build script should patch the sidebar Plugins route separately from the auth gate."
+Assert-True $scriptText.Contains('app-main-*.js') "Sidebar patches should scan the current app-main bundle used by newer Codex Desktop builds."
+Assert-True $scriptText.Contains('$handlerRoutePattern') "Sidebar route patch should support the current extracted click-handler route shape."
+Assert-True $scriptText.Contains('?`plugins`:`skills`') "Sidebar route patch should log the selected Plugins or Skills nav item instead of always logging skills."
+Assert-True $scriptText.Contains('?`/plugins`:`/skills`') "Sidebar route patch should navigate to the real Plugins page when the combined sidebar item is labelled Plugins."
 
 $verifyText = [IO.File]::ReadAllText($verifyScript)
 Assert-True $verifyText.Contains('installed-plugin-auth-gate') "Verification should check whether the installed app.asar still has the sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginGateRegex') "Verification should recognize the stale installed sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginGatePatchedRegex') "Verification should recognize the patched installed sidebar Plugins auth gate."
+Assert-True $verifyText.Contains('$sidebarPluginHandlerRouteRegex') "Verification should recognize the current sidebar Plugins click-handler route shape."
+Assert-True $verifyText.Contains('$sidebarPluginHandlerRoutePatchedRegex') "Verification should recognize the patched current sidebar Plugins click-handler route shape."
+Assert-True $verifyText.Contains('sidebar-plugin-route') "Verification should check that the latest extracted webview sidebar opens the real Plugins page."
+Assert-True $verifyText.Contains('installed-sidebar-plugin-route') "Verification should check that the installed app.asar opens the real Plugins page from the sidebar."
 
 Write-Host "Yukino plugin auth gate patch test passed."

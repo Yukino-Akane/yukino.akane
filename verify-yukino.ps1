@@ -13,8 +13,14 @@ Set-StrictMode -Version Latest
 $checks = New-Object System.Collections.Generic.List[object]
 $staleAgentSettingsWrite = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,mergeStrategy:`upsert`,filePath:z.filePath,expectedVersion:z.expectedVersion})'
 $patchedAgentSettingsWrite = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
+$staleAgentSettingsWriteRegex = '[A-Za-z_$][A-Za-z0-9_$]*\(`write-config-value`,\{hostId:[A-Za-z_$][A-Za-z0-9_$]*,keyPath:[A-Za-z_$][A-Za-z0-9_$]*,value:[A-Za-z_$][A-Za-z0-9_$]*,mergeStrategy:`upsert`,filePath:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?,expectedVersion:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?\}\)'
+$patchedAgentSettingsWriteRegex = '[A-Za-z_$][A-Za-z0-9_$]*\(`batch-write-config-value`,\{hostId:[A-Za-z_$][A-Za-z0-9_$]*,edits:\[\{keyPath:[A-Za-z_$][A-Za-z0-9_$]*,value:[A-Za-z_$][A-Za-z0-9_$]*,mergeStrategy:`upsert`\}\],filePath:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?,expectedVersion:null,reloadUserConfig:!0\}\)'
 $sidebarPluginGateRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*&&[A-Za-z_$][A-Za-z0-9_$]*'
 $sidebarPluginGatePatchedRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=!1,[A-Za-z_$][A-Za-z0-9_$]*=!1'
+$sidebarPluginRouteRegex = 'metadata:\{item:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(`/skills`\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$sidebarPluginRoutePatchedRegex = 'metadata:\{item:[A-Za-z_$][A-Za-z0-9_$]*\?`plugins`:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\?`/plugins`:`/skills`\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\([A-Za-z_$][A-Za-z0-9_$]*\?`/plugins`:`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$sidebarPluginHandlerRouteRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,\{eventName:`nav_clicked`,metadata:\{item:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(`/skills`\)\}.*?onClick:\(\)=>\{\k<handler>\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$sidebarPluginHandlerRoutePatchedRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,\{eventName:`nav_clicked`,metadata:\{item:\k<routeFlag>\?`plugins`:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(\k<routeFlag>\?`/plugins`:`/skills`\)\}.*?onClick:\(\)=>\{\k<handler>\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,\k<routeFlag>\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 
 function Add-Check([string]$Name, [string]$Status, [string]$Detail) {
     $checks.Add([pscustomobject]@{
@@ -82,10 +88,14 @@ if ($latestBuild) {
         if ($agentText -eq $null) {
             Add-Check "agent-settings-asset" "FAIL" "No agent-settings-*.js asset found in $assetsDir"
         }
-        elseif ($agentText.Contains($patchedAgentSettingsWrite) -and -not $agentText.Contains($staleAgentSettingsWrite)) {
+        elseif (
+            ($agentText.Contains($patchedAgentSettingsWrite) -or [regex]::IsMatch($agentText, $patchedAgentSettingsWriteRegex)) -and
+            (-not $agentText.Contains($staleAgentSettingsWrite)) -and
+            (-not [regex]::IsMatch($agentText, $staleAgentSettingsWriteRegex))
+        ) {
             Add-Check "agent-settings-write-patch" "PASS" $agentAssets[0].FullName
         }
-        elseif ($agentText.Contains($staleAgentSettingsWrite)) {
+        elseif ($agentText.Contains($staleAgentSettingsWrite) -or [regex]::IsMatch($agentText, $staleAgentSettingsWriteRegex)) {
             Add-Check "agent-settings-write-patch" "FAIL" "Stale write-config-value route remains in $($agentAssets[0].FullName)"
         }
         else {
@@ -112,12 +122,15 @@ if ($latestBuild) {
             }
         }
 
-        $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=\k<featureFlag>&&\k<gate>'
+        $sidebarPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(\k<auth>\),(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=(?:[A-Za-z_$][A-Za-z0-9_$]*&&)?\k<featureFlag>&&\k<gate>'
         $sidebarPatchedPattern = '(?<prefix>\{authMethod:(?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),(?<featureFlag>[A-Za-z_$][A-Za-z0-9_$]*)=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),)(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)=!1,(?<disabledNav>[A-Za-z_$][A-Za-z0-9_$]*)=!1'
-        $indexAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.js")
+        $sidebarAssets = @(
+            Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.js"
+            Get-ChildItem -LiteralPath $assetsDir -File -Filter "app-main-*.js"
+        ) | Sort-Object FullName -Unique
         $sidebarHasOldGate = $false
         $sidebarHasPatchedGate = $false
-        foreach ($asset in $indexAssets) {
+        foreach ($asset in $sidebarAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
             if (-not $text.Contains("pluginsDisabledTooltip")) {
                 continue
@@ -138,6 +151,30 @@ if ($latestBuild) {
         }
         else {
             Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
+        }
+
+        $sidebarHasOldPluginRoute = $false
+        $sidebarHasPatchedPluginRoute = $false
+        foreach ($asset in $sidebarAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if (-not $text.Contains("sidebarElectron.skillsAppsRouteNavLink")) {
+                continue
+            }
+            if ([regex]::IsMatch($text, $sidebarPluginRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRouteRegex)) {
+                $sidebarHasOldPluginRoute = $true
+            }
+            if ([regex]::IsMatch($text, $sidebarPluginRoutePatchedRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRoutePatchedRegex)) {
+                $sidebarHasPatchedPluginRoute = $true
+            }
+        }
+        if ($sidebarHasPatchedPluginRoute -and (-not $sidebarHasOldPluginRoute)) {
+            Add-Check "sidebar-plugin-route" "PASS" "Sidebar Plugins nav opens the Plugins page instead of Skills"
+        }
+        elseif ($sidebarHasOldPluginRoute) {
+            Add-Check "sidebar-plugin-route" "FAIL" "Sidebar Plugins nav still routes to /skills"
+        }
+        else {
+            Add-Check "sidebar-plugin-route" "FAIL" "Expected sidebar Plugins route pattern not found"
         }
 
         $oldSettingsEntry = 'case`plugins-settings`:return d===`extension`&&u;case`skills-settings`:return d===`extension`&&!u;'
@@ -168,7 +205,10 @@ if ($latestBuild) {
         }
 
         $sidebarBackgroundAsset = Join-Path $assetsDir "yukino-sidebar-background.png"
-        $sidebarCssAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css")
+        $sidebarCssAssets = @(
+            Get-ChildItem -LiteralPath $assetsDir -File -Filter "index-*.css"
+            Get-ChildItem -LiteralPath $assetsDir -File -Filter "app-main-*.css"
+        ) | Sort-Object FullName -Unique
         $sidebarCssHasPatch = $false
         $sidebarCssHasAspectSafeSizing = $false
         $sidebarCssHasCenteredPortraitFraming = $false
@@ -199,7 +239,7 @@ if ($latestBuild) {
             Add-Check "sidebar-background-patch" "FAIL" "Missing sidebar background asset: $sidebarBackgroundAsset"
         }
         elseif (-not $sidebarCssHasPatch) {
-            Add-Check "sidebar-background-patch" "FAIL" "Missing sidebar background CSS patch in index-*.css"
+            Add-Check "sidebar-background-patch" "FAIL" "Missing sidebar background CSS patch in main webview CSS"
         }
         elseif ($sidebarCssHasDistortedSizing -or $sidebarCssHasFullWindowCover -or -not $sidebarCssHasAspectSafeSizing -or -not $sidebarCssHasCenteredPortraitFraming) {
             Add-Check "sidebar-background-patch" "FAIL" "Sidebar background CSS does not preserve the image aspect ratio"
@@ -223,8 +263,16 @@ if ($installed) {
         if (Get-Command rg -ErrorAction SilentlyContinue) {
             & rg -a --fixed-strings --quiet -- $patchedAgentSettingsWrite $installedAsar
             $installedHasPatchedWrite = $LASTEXITCODE -eq 0
+            if (-not $installedHasPatchedWrite) {
+                & rg -a --pcre2 --quiet -- $patchedAgentSettingsWriteRegex $installedAsar
+                $installedHasPatchedWrite = $LASTEXITCODE -eq 0
+            }
             & rg -a --fixed-strings --quiet -- $staleAgentSettingsWrite $installedAsar
             $installedHasStaleWrite = $LASTEXITCODE -eq 0
+            if (-not $installedHasStaleWrite) {
+                & rg -a --pcre2 --quiet -- $staleAgentSettingsWriteRegex $installedAsar
+                $installedHasStaleWrite = $LASTEXITCODE -eq 0
+            }
             if ($installedHasPatchedWrite -and -not $installedHasStaleWrite) {
                 Add-Check "installed-agent-settings-patch" "PASS" $installedAsar
             }
@@ -247,6 +295,28 @@ if ($installed) {
             }
             else {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed app.asar does not contain the expected patched Plugins sidebar gate"
+            }
+
+            & rg -a --pcre2 --quiet -- $sidebarPluginRouteRegex $installedAsar
+            $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
+            if (-not $installedHasSidebarPluginRoute) {
+                & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRouteRegex $installedAsar
+                $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
+            }
+            & rg -a --pcre2 --quiet -- $sidebarPluginRoutePatchedRegex $installedAsar
+            $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
+            if (-not $installedHasPatchedSidebarPluginRoute) {
+                & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRoutePatchedRegex $installedAsar
+                $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
+            }
+            if ($installedHasPatchedSidebarPluginRoute -and -not $installedHasSidebarPluginRoute) {
+                Add-Check "installed-sidebar-plugin-route" "PASS" $installedAsar
+            }
+            elseif ($installedHasSidebarPluginRoute) {
+                Add-Check "installed-sidebar-plugin-route" "FAIL" "Installed app.asar still routes the sidebar Plugins nav to /skills; install the latest MSIX to apply the fix"
+            }
+            else {
+                Add-Check "installed-sidebar-plugin-route" "FAIL" "Installed app.asar does not contain the expected patched sidebar Plugins route"
             }
 
             & rg -a --fixed-strings --quiet -- "yukino-sidebar-background.png" $installedAsar
@@ -272,12 +342,14 @@ if ($installed) {
         else {
             Add-Check "installed-agent-settings-patch" "WARN" "rg is not available; skipped installed app.asar text probe"
             Add-Check "installed-plugin-auth-gate" "WARN" "rg is not available; skipped installed plugin auth gate text probe"
+            Add-Check "installed-sidebar-plugin-route" "WARN" "rg is not available; skipped installed sidebar plugin route text probe"
             Add-Check "installed-sidebar-background-patch" "WARN" "rg is not available; skipped installed sidebar background text probe"
         }
     }
     else {
         Add-Check "installed-agent-settings-patch" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-plugin-auth-gate" "FAIL" "Missing installed app.asar: $installedAsar"
+        Add-Check "installed-sidebar-plugin-route" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-sidebar-background-patch" "FAIL" "Missing installed app.asar: $installedAsar"
     }
 }

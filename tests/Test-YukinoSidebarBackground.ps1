@@ -28,6 +28,7 @@ Assert-FileSha256 $background "8C9C04205C9DD6C7D1CADAD316E14E55F66CED62D9C57A2CE
 $scriptText = [IO.File]::ReadAllText($buildScript)
 Assert-True $scriptText.Contains("Patch-WebviewSidebarBackground") "Build script should include the sidebar background patch function."
 Assert-True $scriptText.Contains("yukino-sidebar-background.png") "Build script should copy the sidebar background asset into the webview bundle."
+Assert-True $scriptText.Contains('app-main-*.css') "Build script should support the current app-main CSS bundle used by newer Codex Desktop builds."
 Assert-True $scriptText.Contains("--yukino-sidebar-background-image") "Build script should inject a CSS variable for the sidebar background image."
 Assert-True (-not $scriptText.Contains("background-size: var(--yukino-sidebar-background-width) 100%, var(--yukino-sidebar-background-width) 100%;")) "Sidebar background image must not be forced into the sidebar dimensions; that distorts the portrait image."
 Assert-True (-not $scriptText.Contains("background-size: var(--yukino-sidebar-background-width) 100%, cover;")) "Sidebar background image must not use full-window cover; that crops the portrait down to a small slice in the rail."

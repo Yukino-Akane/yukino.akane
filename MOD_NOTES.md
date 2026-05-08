@@ -67,9 +67,11 @@ Updater isolation:
 Feature and settings patches:
 
 - Filters unsupported experimental feature sync entries from webview entry assets.
-- Disables the ChatGPT-only API-key gate in `gradient-*.js` webview assets.
+- Disables the ChatGPT-only API-key gate in `gradient-*.js`, `skills-page-*.js`, and current `app-main-*.js` webview assets.
+- Patches the combined sidebar Plugins/Skills click route so the desktop `Plugins` label opens `/plugins` instead of `/skills`.
 - Enables the desktop plugins settings entry in `settings-page-*.js`.
 - Rewrites Agent Settings config writes from `write-config-value` to `batch-write-config-value` with reload enabled.
+- Supports the current `app-main-*.css` bundle for the Yukino sidebar background patch.
 
 Runtime and packaging:
 
@@ -86,21 +88,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260506-160259`.
+- `latest-build`: PASS, `logs\build-20260508-231224`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
-- `plugins-settings-entry`: PASS.
-- `installed-package`: PASS, `yukino.akane_26.429.8261.1_x64__fnxqm6pztzbs0`.
+- `sidebar-plugin-route`: PASS.
+- `plugins-settings-entry`: WARN, upstream settings asset pattern changed.
+- `installed-package`: PASS, `yukino.akane_26.506.2212.1_x64__fnxqm6pztzbs0`.
 - `installed-agent-settings-patch`: PASS.
 - `installed-plugin-auth-gate`: PASS.
-- `latest-msix`: PASS, `out\yukino.akane_26.429.8261.1_x64.msix`.
-- `config-approval-policy`: PASS, `approval_policy=on-request`.
-- `config-sandbox-mode`: PASS, `sandbox_mode=workspace-write`.
+- `installed-sidebar-plugin-route`: PASS.
+- `latest-msix`: PASS, `out\yukino.akane_26.506.2212.1_x64.msix`.
+- `config-approval-policy`: PASS, `approval_policy=never`.
+- `config-sandbox-mode`: PASS, `sandbox_mode=danger-full-access`.
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
 - `latest-batch-write-log`: WARN when no recent config write occurred.
-- `recent-config-conflicts`: PASS.
+- `recent-config-conflicts`: WARN when older conflict-related log lines are still in the latest sampled logs.
 
 Sandbox compatibility note:
 
