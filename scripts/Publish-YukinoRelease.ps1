@@ -161,6 +161,15 @@ try {
     $existing = & gh release view $Tag --repo $Repo --json tagName 2>$null
     $releaseViewExitCode = $LASTEXITCODE
 }
+catch {
+    if ($_.Exception.Message -match "release not found") {
+        $existing = $null
+        $releaseViewExitCode = 1
+    }
+    else {
+        throw
+    }
+}
 finally {
     if ($nativeErrorPreferenceWasSet) {
         $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
