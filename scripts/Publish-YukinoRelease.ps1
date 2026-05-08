@@ -198,3 +198,13 @@ if ($Latest) {
 if ($LASTEXITCODE -ne 0) {
     throw "gh release create failed."
 }
+
+$controlHomeScript = Join-Path $scriptsDir "yukino-control-home.ps1"
+if (Test-Path -LiteralPath $controlHomeScript) {
+    . $controlHomeScript
+    Write-YukinoReleaseRecord `
+        -Tag $Tag `
+        -MsixPath $msix `
+        -MsixSha256 $msixHash `
+        -Url "https://github.com/$Repo/releases/tag/$Tag"
+}

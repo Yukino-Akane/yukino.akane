@@ -1,0 +1,13 @@
+{
+  "name": "yukino-akane-maintenance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Yukino maintenance workspace for rebuilding Codex Desktop into a verified Yukino MSIX.",
+  "scripts": {
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-YukinoTests.ps1",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File build-yukino.ps1",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File verify-yukino.ps1",
+    "release:dry": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Publish-YukinoRelease.ps1 -DryRun",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Publish-YukinoRelease.ps1 -Latest"
+  }
+}

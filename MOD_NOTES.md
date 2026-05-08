@@ -8,6 +8,7 @@ This workspace rebuilds the installed Codex Desktop Windows package into a separ
 
 - `build-yukino.ps1`: main rebuild script.
 - `verify-yukino.ps1`: post-build and installed-package verification script.
+- `package.json`: npm command surface for tests, build, verification, and release commands.
 - `src_unpacked/`: copied and patched source package tree. Generated, ignored.
 - `logs/`: timestamped ASAR extraction/repack work directories and smoke logs. Generated, ignored.
 - `out/`: MSIX, certificate, and unpack verification output. Generated, ignored.
@@ -24,18 +25,21 @@ At the time this note was written, generated data under this workspace was about
 
 1. Resolve the latest installed `OpenAI.Codex` AppX package.
 2. Copy the installed package into `src_unpacked/`.
-3. Remove old AppX metadata and signatures.
-4. Patch `AppxManifest.xml` to use `yukino.akane`, `Yukino`, `CN=Yukino`, and the `yukino://` protocol.
-5. Rename `app\Codex.exe` to `app\Yukino.exe`.
-6. Extract `app\resources\app.asar`.
-7. Patch JavaScript, webview assets, package metadata, loose resources, and text branding.
-8. Run `node --check` over patched build JavaScript.
-9. Repack `app.asar`, preserving unpacked native modules for `better-sqlite3` and `node-pty`.
-10. Launch once to capture Electron ASAR integrity output, then patch the executable hash when needed.
-11. Smoke launch the patched source tree.
-12. Pack and sign the MSIX with Windows SDK tools.
-13. Unpack the MSIX for structure verification.
-14. Optionally install and run `verify-yukino.ps1`.
+3. Write `logs\build-*\source-manifest.json` from the copied official source package.
+4. Remove old AppX metadata and signatures.
+5. Patch `AppxManifest.xml` to use `yukino.akane`, `Yukino`, `CN=Yukino`, and the `yukino://` protocol.
+6. Rename `app\Codex.exe` to `app\Yukino.exe`.
+7. Extract `app\resources\app.asar`.
+8. Patch JavaScript, webview assets, package metadata, loose resources, and text branding.
+9. Run `node --check` over patched build JavaScript.
+10. Repack `app.asar`, preserving unpacked native modules for `better-sqlite3` and `node-pty`.
+11. Launch once to capture Electron ASAR integrity output, then patch the executable hash when needed.
+12. Smoke launch the patched source tree.
+13. Pack and sign the MSIX with Windows SDK tools.
+14. Unpack the MSIX for structure verification.
+15. Write `logs\build-*\build-audit.json` to compare source and output changes against an allowlist.
+16. Record build metadata under `%USERPROFILE%\.yukino\build-history.jsonl`.
+17. Optionally install and run `verify-yukino.ps1`.
 
 ## Release Flow
 
@@ -48,6 +52,9 @@ At the time this note was written, generated data under this workspace was about
 5. Run `verify-yukino.ps1`; publishing stops if verification fails.
 6. In dry-run mode, print the assets without touching GitHub.
 7. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
+8. Record published release metadata under `%USERPROFILE%\.yukino\release-history.jsonl`.
+
+Verification runs also append `%USERPROFILE%\.yukino\verify-history.jsonl`.
 
 ## Patch Inventory
 

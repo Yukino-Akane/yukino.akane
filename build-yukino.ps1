@@ -18,6 +18,17 @@ function Write-Step([string]$Message) {
     Write-Host "== $Message ==" -ForegroundColor Cyan
 }
 
+function Invoke-OptionalScript([string]$Path, [string[]]$Arguments) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $Path @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Path failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Resolve-SdkTool([string]$ToolName) {
     $tool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter $ToolName -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -match "\\x64\\" } |
@@ -612,6 +623,14 @@ Write-Step "Copy source package"
 Remove-PathSafe $src $OutputRoot
 Copy-Item -LiteralPath $sourceRoot -Destination $src -Recurse -Force
 
+$sourceManifestPath = Join-Path $work "source-manifest.json"
+Invoke-OptionalScript (Join-Path $PSScriptRoot "scripts\Write-YukinoSourceManifest.ps1") @(
+    "-SourceRoot", $src,
+    "-SourcePackageFullName", $sourcePackage.PackageFullName,
+    "-SourceVersion", ([string]$sourcePackage.Version),
+    "-ManifestPath", $sourceManifestPath
+)
+
 Write-Step "Remove old package metadata"
 foreach ($relative in @("AppxBlockMap.xml", "AppxSignature.p7x", "AppxMetadata", "microsoft.system.package.metadata")) {
     Remove-PathSafe (Join-Path $src $relative) $src
@@ -736,6 +755,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "makeappx unpack verification failed."
 }
 
+$buildAuditPath = Join-Path $work "build-audit.json"
+Invoke-OptionalScript (Join-Path $PSScriptRoot "scripts\Write-YukinoBuildAudit.ps1") @(
+    "-SourceManifestPath", $sourceManifestPath,
+    "-OutputRoot", $src,
+    "-AuditPath", $buildAuditPath,
+    "-DisplayName", $DisplayName
+)
+
 if ($Install) {
     Write-Step "Install Yukino package"
     Write-Host "Install mode will close the installed $DisplayName package before replacing it." -ForegroundColor Yellow
@@ -762,6 +789,19 @@ if ($Install) {
 }
 
 Write-Step "Done"
+$controlHomeScript = Join-Path $PSScriptRoot "scripts\yukino-control-home.ps1"
+if (Test-Path -LiteralPath $controlHomeScript) {
+    . $controlHomeScript
+    Write-YukinoBuildRecord `
+        -EventName "build" `
+        -SourcePackageFullName $sourcePackage.PackageFullName `
+        -SourceVersion ([string]$sourcePackage.Version) `
+        -TargetVersion $targetVersion `
+        -MsixPath $msix `
+        -WorkDir $work `
+        -Installed ([bool]$Install) `
+        -Summary @{ sourceManifest = $sourceManifestPath; buildAudit = $buildAuditPath; skipSmoke = [bool]$SkipSmoke }
+}
 [pscustomobject]@{
     SourcePackage = $sourcePackage.PackageFullName
     TargetVersion = $targetVersion

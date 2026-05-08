@@ -518,6 +518,15 @@ $checks | Format-Table -AutoSize -Wrap
 
 $failures = @($checks | Where-Object { $_.Status -eq "FAIL" })
 $warnings = @($checks | Where-Object { $_.Status -eq "WARN" })
+$controlHomeScript = Join-Path $ProjectRoot "scripts\yukino-control-home.ps1"
+$verificationStatus = if ($failures.Count -gt 0) { "failed" } else { "passed" }
+if (Test-Path -LiteralPath $controlHomeScript) {
+    . $controlHomeScript
+    Write-YukinoVerificationRecord `
+        -Status $verificationStatus `
+        -ProjectRoot $ProjectRoot `
+        -Checks @($checks | ForEach-Object { "$($_.Name):$($_.Status)" })
+}
 
 Write-Host ""
 if ($failures.Count -gt 0) {

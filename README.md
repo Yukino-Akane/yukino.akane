@@ -30,6 +30,12 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 Run from this directory:
 
 ```powershell
+npm run build
+```
+
+Equivalent direct command:
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build-yukino.ps1
 ```
 
@@ -50,6 +56,12 @@ The script resolves the currently installed `OpenAI.Codex` package and emits a t
 ## Verify
 
 ```powershell
+npm run verify
+```
+
+Equivalent direct command:
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 ```
 
@@ -62,6 +74,14 @@ The latest known verification keeps the `[windows] sandbox` value as a compatibi
 - `browser-use@openai-bundled` enabled
 
 For Codex Desktop `26.506.2212.0`, the rebuild also patches the combined sidebar `Plugins` nav item so it opens the `/plugins` route with the Plugins browse tab selected instead of falling through to the default Skills tab when the desktop route flag labels that item as Plugins.
+
+Run all focused maintenance tests with:
+
+```powershell
+npm test
+```
+
+After installation or release, use [docs/yukino-smoke-checklist.md](docs/yukino-smoke-checklist.md) for the manual GUI checks.
 
 ## Install From A Private Release
 
