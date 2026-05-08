@@ -78,6 +78,15 @@ Runtime and packaging:
 - Keeps native module unpack rules for `node_modules/better-sqlite3` and `node_modules/node-pty`.
 - Patches Electron ASAR integrity hash in the renamed executable when Electron reports a mismatch.
 
+## Patch Contracts
+
+Plugin auth gate:
+
+- In current `skills-page-*.js` bundles, the Plugins page auth-block check is anchored near `pluginsAuthBlockedToast.title` and appears as `s&&!m`.
+- The intended Yukino patch is `s&&!m` -> `s&&!0`, which keeps the Plugins page entry enabled while bypassing the API-key guard.
+- Do not patch this shape to `s&&!1`; that makes the page-entry condition permanently false and leaves the sidebar Plugins flow stuck on the Skills surface.
+- `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require `s&&!0` and reject `s&&!1` in both latest build assets and installed `app.asar`.
+
 ## Latest Verified State
 
 Verification command:
