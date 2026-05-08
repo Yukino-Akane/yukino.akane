@@ -152,9 +152,25 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "gh CLI is required to publish a release."
 }
 
-$existing = & gh release view $Tag --repo $Repo --json tagName 2>$null
-if ($LASTEXITCODE -eq 0 -and $existing) {
+$nativeErrorPreferenceWasSet = Test-Path Variable:\PSNativeCommandUseErrorActionPreference
+if ($nativeErrorPreferenceWasSet) {
+    $previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+try {
+    $existing = & gh release view $Tag --repo $Repo --json tagName 2>$null
+    $releaseViewExitCode = $LASTEXITCODE
+}
+finally {
+    if ($nativeErrorPreferenceWasSet) {
+        $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+    }
+}
+if ($releaseViewExitCode -eq 0 -and $existing) {
     throw "Release already exists: $Tag"
+}
+elseif ($releaseViewExitCode -ne 0 -and $releaseViewExitCode -ne 1) {
+    throw "gh release view failed with exit code $releaseViewExitCode."
 }
 
 $arguments = @(
