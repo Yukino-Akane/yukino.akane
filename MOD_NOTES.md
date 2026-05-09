@@ -95,6 +95,12 @@ Plugin auth gate:
 - Do not patch this shape to `s&&!1`; that makes the page-entry condition permanently false and leaves the sidebar Plugins flow stuck on the Skills surface.
 - `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require `s&&!0` and reject `s&&!1` in both latest build assets and installed `app.asar`.
 
+Sidebar Plugins route:
+
+- In current `app-main-*.js` bundles, the sidebar Plugins and Skills entries can share a minified click handler and shared page surface.
+- The Plugins branch must navigate to `/plugins` with ``state:{initialMode:`browse`,initialTab:`plugins`}`` so the shared page opens the Plugins tab instead of defaulting back to Skills.
+- `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require that stateful Plugins route in both latest build assets and installed `app.asar`.
+
 ## Latest Verified State
 
 Verification command:
@@ -105,7 +111,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260509-102351`.
+- `latest-build`: PASS, `logs\build-20260509-111641`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `sidebar-plugin-route`: PASS.

@@ -39,6 +39,7 @@ Assert-True $scriptText.Contains('app-main-*.js') "Sidebar patches should scan t
 Assert-True $scriptText.Contains('$handlerRoutePattern') "Sidebar route patch should support the current extracted click-handler route shape."
 Assert-True $scriptText.Contains('?`plugins`:`skills`') "Sidebar route patch should log the selected Plugins or Skills nav item instead of always logging skills."
 Assert-True $scriptText.Contains('?`/plugins`:`/skills`') "Sidebar route patch should navigate to the real Plugins page when the combined sidebar item is labelled Plugins."
+Assert-True $scriptText.Contains('state:{initialMode:`browse`,initialTab:`plugins`}') "Sidebar route patch should pass Plugins initial state so the shared Skills/Plugins page opens the Plugins tab."
 
 $verifyText = [IO.File]::ReadAllText($verifyScript)
 Assert-True $verifyText.Contains('installed-plugin-auth-gate') "Verification should check whether the installed app.asar still has the sidebar Plugins auth gate."
@@ -46,6 +47,7 @@ Assert-True $verifyText.Contains('$sidebarPluginGateRegex') "Verification should
 Assert-True $verifyText.Contains('$sidebarPluginGatePatchedRegex') "Verification should recognize the patched installed sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginHandlerRouteRegex') "Verification should recognize the current sidebar Plugins click-handler route shape."
 Assert-True $verifyText.Contains('$sidebarPluginHandlerRoutePatchedRegex') "Verification should recognize the patched current sidebar Plugins click-handler route shape."
+Assert-True $verifyText.Contains('$sidebarPluginHandlerRouteStatePatchedRegex') "Verification should require the current sidebar Plugins click-handler to pass Plugins initial state."
 Assert-True $verifyText.Contains('s&&!0') "Verification should require the Plugins page entry to stay enabled for API-key users."
 Assert-True $verifyText.Contains('s&&!1') "Verification should reject installed bundles that permanently disable the Plugins page entry."
 Assert-True $verifyText.Contains('$pluginDetailRedirectRegex') "Verification should detect the current stale plugin detail deep-link redirect guard."

@@ -374,7 +374,7 @@ function Patch-PluginSidebarRoute([string]$AssetsDir) {
             $location = $inlineMatch.Groups["location"].Value
             $routeFlag = $inlineMatch.Groups["routeFlag"].Value
             $old = 'metadata:{item:`skills`}}),' + $navigate + '(`/skills`)},isActive:' + $location + '.pathname.startsWith(`/skills`),label:' + $routeFlag + '?'
-            $new = 'metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $navigate + '(' + $routeFlag + '?`/plugins`:`/skills`)},isActive:' + $location + '.pathname.startsWith(' + $routeFlag + '?`/plugins`:`/skills`),label:' + $routeFlag + '?'
+            $new = 'metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $routeFlag + '?' + $navigate + '(`/plugins`,{state:{initialMode:`browse`,initialTab:`plugins`}}):' + $navigate + '(`/skills`)},isActive:' + $location + '.pathname.startsWith(' + $routeFlag + '?`/plugins`:`/skills`),label:' + $routeFlag + '?'
             $newText = $newText.Replace($inlineMatch.Value, $inlineMatch.Value.Replace($old, $new))
         }
 
@@ -395,7 +395,7 @@ function Patch-PluginSidebarRoute([string]$AssetsDir) {
             $handlerScope = $handlerMatch.Groups["handlerScope"].Value
             $handlerNavigate = $handlerMatch.Groups["handlerNavigate"].Value
             $logger = $handlerMatch.Groups["logger"].Value
-            $newHandler = 'function ' + $handler + '(' + $handlerScope + ',' + $handlerNavigate + ',' + $routeFlag + '){' + $logger + '(' + $handlerScope + ',{eventName:`nav_clicked`,metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $handlerNavigate + '(' + $routeFlag + '?`/plugins`:`/skills`)}'
+            $newHandler = 'function ' + $handler + '(' + $handlerScope + ',' + $handlerNavigate + ',' + $routeFlag + '){' + $logger + '(' + $handlerScope + ',{eventName:`nav_clicked`,metadata:{item:' + $routeFlag + '?`plugins`:`skills`}}),' + $routeFlag + '?' + $handlerNavigate + '(`/plugins`,{state:{initialMode:`browse`,initialTab:`plugins`}}):' + $handlerNavigate + '(`/skills`)}'
             $newText = [regex]::new($handlerDefinitionPattern).Replace($newText, {
                 param($handlerDefinitionMatch)
                 $newHandler
