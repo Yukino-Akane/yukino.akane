@@ -2,6 +2,8 @@
 
 Use this checklist after rebuilding, installing, or publishing a Yukino build.
 
+For the current stable release baseline, see [yukino-v26.506.3741.1-baseline.md](yukino-v26.506.3741.1-baseline.md).
+
 ## Build Artifacts
 
 - Run `npm test`.
@@ -26,3 +28,4 @@ Use this checklist after rebuilding, installing, or publishing a Yukino build.
 - Confirm `SHA256SUMS.txt` matches the released MSIX.
 - Confirm GitHub release assets include the MSIX, `Yukino.cer`, `SHA256SUMS.txt`, and `Install-YukinoRelease.ps1`.
 - Do not reinstall while the user is actively using Yukino unless they explicitly approve it.
+- After publishing, run `scripts\Test-YukinoReleaseInstall.ps1 -Tag <tag>` when the user has approved a real release install smoke.

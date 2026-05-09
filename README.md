@@ -14,6 +14,7 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 - Publisher: `CN=Yukino`.
 - Latest built package: `out/yukino.akane_26.506.3741.1_x64.msix`.
 - Latest installed package observed: `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`.
+- Stable private release baseline: `v26.506.3741.1-yukino.1`.
 - Config home: `%USERPROFILE%\.yukino`.
 
 ## Files
@@ -24,6 +25,7 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 - `scripts/`: helper scripts used by the rebuild workflow.
 - `tests/`: focused PowerShell checks for source asset generation and injected UI patches.
 - `MOD_NOTES.md`: patch inventory, build flow, verification notes, and known follow-ups.
+- `docs/yukino-v26.506.3741.1-baseline.md`: stable release baseline, incident lessons, verification evidence, and next roadmap.
 
 ## Build
 
@@ -83,6 +85,8 @@ npm test
 
 After installation or release, use [docs/yukino-smoke-checklist.md](docs/yukino-smoke-checklist.md) for the manual GUI checks.
 
+The current stable baseline and roadmap are recorded in [docs/yukino-v26.506.3741.1-baseline.md](docs/yukino-v26.506.3741.1-baseline.md).
+
 ## Install From A Private Release
 
 Download the MSIX package, `Yukino.cer`, `SHA256SUMS.txt`, and `Install-YukinoRelease.ps1` from the private GitHub release, then run:
@@ -110,6 +114,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRele
 The publish script recalculates `SHA256SUMS.txt`, copies `Install-YukinoRelease.ps1` into `out/`, writes release notes, runs `verify-yukino.ps1`, and uploads the MSIX, certificate, checksum file, and installer through `gh release create`.
 
 Publishing also runs `scripts\Test-YukinoReleaseSafety.ps1`. The safety gate requires the GitHub repository to be private and rejects tracked credential/config paths, high-confidence key/token patterns, CPA skill names, and CPA-related paths inside the MSIX.
+
+After publishing, run the real release install smoke when the user has approved reinstalling Yukino:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoReleaseInstall.ps1 -Tag v<version>-yukino.<n>
+```
+
+The install smoke downloads the private GitHub release assets, verifies `SHA256SUMS.txt`, runs the published installer, runs `verify-yukino.ps1`, launches the installed `Yukino.exe`, and removes the temporary download directory.
 
 ## Repository Policy
 
