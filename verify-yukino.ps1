@@ -179,11 +179,10 @@ function Add-InstalledChromePluginCacheCheck([string]$PluginRoot) {
     Add-Check "installed-chrome-plugin-cache" "FAIL" "Incomplete Chrome plugin cache at $PluginRoot; missing or invalid: $($result.Missing -join '; ')"
 }
 
-function Add-ChromePluginCachePendingCleanupCheck([string]$ChromeCacheRoot) {
+function Get-ChromePluginPendingCleanupEntries([string]$ChromeCacheRoot) {
     $pendingManifest = Join-Path $ChromeCacheRoot "pending-delete.jsonl"
     if (-not (Test-Path -LiteralPath $pendingManifest)) {
-        Add-Check "chrome-plugin-cache-pending-cleanup" "PASS" "No pending delayed cleanup manifest: $pendingManifest"
-        return
+        return @()
     }
 
     $pending = @()
@@ -201,6 +200,18 @@ function Add-ChromePluginCachePendingCleanupCheck([string]$ChromeCacheRoot) {
             $pending += "invalid manifest line"
         }
     }
+
+    return $pending
+}
+
+function Add-ChromePluginCachePendingCleanupCheck([string]$ChromeCacheRoot) {
+    $pendingManifest = Join-Path $ChromeCacheRoot "pending-delete.jsonl"
+    if (-not (Test-Path -LiteralPath $pendingManifest)) {
+        Add-Check "chrome-plugin-cache-pending-cleanup" "PASS" "No pending delayed cleanup manifest: $pendingManifest"
+        return
+    }
+
+    $pending = @(Get-ChromePluginPendingCleanupEntries -ChromeCacheRoot $ChromeCacheRoot)
 
     if ($pending.Count -eq 0) {
         Add-Check "chrome-plugin-cache-pending-cleanup" "PASS" "Delayed cleanup manifest is empty: $pendingManifest"
@@ -1072,9 +1083,15 @@ if (Test-Path -LiteralPath $appLogDir) {
         Add-Check "plugin_cache_windows_file_lock" "PASS" "No Chrome plugin cache lock failures in latest $RecentLogFileCount log file(s)"
     }
     else {
-        $cacheRecovered = (Test-ChromePluginCache -PluginRoot $installedChromePluginRoot).Complete -and -not (Test-Path -LiteralPath (Join-Path $installedChromeCacheRoot "pending-delete.jsonl"))
-        $prefix = if ($cacheRecovered) { "Historical/recovered" } else { "Active or unrecovered" }
-        Add-Check "plugin_cache_windows_file_lock" "WARN" "$prefix Chrome plugin cache lock evidence: $($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
+        $cacheState = Test-ChromePluginCache -PluginRoot $installedChromePluginRoot
+        $pendingCleanupEntries = @(Get-ChromePluginPendingCleanupEntries -ChromeCacheRoot $installedChromeCacheRoot)
+        $cacheRecovered = $cacheState.Complete -and $pendingCleanupEntries.Count -eq 0 -and $nativeHostStatus.Correct
+        if ($cacheRecovered) {
+            Add-Check "plugin_cache_windows_file_lock" "PASS" "Recovered Chrome plugin cache lock evidence (Historical/recovered): $($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
+        }
+        else {
+            Add-Check "plugin_cache_windows_file_lock" "WARN" "Active or unrecovered Chrome plugin cache lock evidence: $($pluginCacheLockLines.Count) line(s); cacheComplete=$($cacheState.Complete); pendingCleanupEntries=$($pendingCleanupEntries.Count); nativeHostCorrect=$($nativeHostStatus.Correct); latest=$($pluginCacheLockLines[0])"
+        }
     }
 }
 else {

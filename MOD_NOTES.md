@@ -137,7 +137,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260509-143956`.
+- `latest-build`: PASS, `logs\build-20260509-164031`.
 - `chrome-plugin-build-cache`: PASS after `logs\build-20260509-164031`.
 - `agent-settings-write-patch`: PASS.
 - `settings-local-diagnostics-entry`: PASS, hidden inside Agent Settings maintenance.
@@ -162,7 +162,7 @@ Latest observed result:
 - `latest-batch-write-log`: PASS when no recent `config/batchWrite` evidence exists; the detail asks for a manual settings write when validating that patch.
 - `recent-config-conflicts`: PASS when recent `-32600` lines are unrelated to `config/...` methods.
 - `chrome-plugin-cache-pending-cleanup`: PASS when no delayed cleanup manifest remains under `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\pending-delete.jsonl`.
-- `plugin_cache_windows_file_lock`: WARN can be historical/recovered when `latest` is complete and no pending cleanup manifest remains. Treat it as active damage only when paired with an incomplete `latest` cache or pending cleanup entries.
+- `plugin_cache_windows_file_lock`: PASS when lock evidence is historical/recovered, `latest` is complete, no pending cleanup entries remain, and the native host manifest targets Yukino. Treat it as WARN only when paired with an incomplete `latest` cache, pending cleanup entries, or a bad native host target.
 - `post-install-browser-smoke`: PASS; current installed Yukino has a Yukino-path app-server process, Browser runtime pipe log, Yukino `node_repl.exe`, enabled Chrome extension, native host manifest targeting Yukino's cache, and a non-disruptive `about:blank` Chrome dry-run. When a manual Browser GUI smoke has just run, `scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -RequireBrowserRuntimeActivity` also requires matched `IAB_LIFECYCLE` Browser turn start/end log lines with the same `turnId`.
 
 Sandbox compatibility note:

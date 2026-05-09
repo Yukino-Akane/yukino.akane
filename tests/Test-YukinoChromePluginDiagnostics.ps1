@@ -32,6 +32,8 @@ Assert-True $verifyText.Contains("installed-chrome-plugin-cache") "Verification 
 Assert-True $verifyText.Contains("chrome-native-host-yukino-target") "Verification should ensure Chrome's native host manifest points at Yukino's cache."
 Assert-True $verifyText.Contains("plugin_cache_windows_file_lock") "Verification should detect the Windows plugin cache lock failure in recent logs."
 Assert-True $verifyText.Contains("Historical/recovered") "Verification should distinguish recovered Chrome plugin cache lock evidence from active cache damage."
+Assert-True $verifyText.Contains('Add-Check "plugin_cache_windows_file_lock" "PASS" "Recovered Chrome plugin cache lock evidence') "Verification should report recovered Chrome plugin cache lock evidence as PASS."
+Assert-True $verifyText.Contains('Add-Check "plugin_cache_windows_file_lock" "WARN" "Active or unrecovered Chrome plugin cache lock evidence') "Verification should keep WARN for active or unrecovered Chrome plugin cache lock evidence."
 Assert-True $verifyText.Contains("chrome-plugin-cache-pending-cleanup") "Verification should report delayed Chrome plugin cache cleanup state."
 Assert-True $verifyText.Contains("pending-delete.jsonl") "Verification should inspect the delayed Chrome plugin cleanup manifest."
 
@@ -42,6 +44,8 @@ Assert-True $localStateText.Contains("Repair-YukinoChromePluginCache.ps1") "Loca
 Assert-True $localStateText.Contains("chrome-native-host-yukino-target") "Local diagnostics should report whether the native host points to Yukino."
 Assert-True $localStateText.Contains("plugin_cache_windows_file_lock") "Local diagnostics should surface recent Chrome plugin cache lock failures."
 Assert-True $localStateText.Contains("Historical/recovered") "Local diagnostics should distinguish recovered Chrome plugin cache lock evidence from active cache damage."
+Assert-True $localStateText.Contains('Add-Check "plugin_cache_windows_file_lock" "PASS" "Recovered Chrome plugin cache lock evidence') "Local diagnostics should report recovered Chrome plugin cache lock evidence as PASS."
+Assert-True $localStateText.Contains('Add-Check "plugin_cache_windows_file_lock" "WARN" "Active or unrecovered Chrome plugin cache lock evidence') "Local diagnostics should keep WARN for active or unrecovered Chrome plugin cache lock evidence."
 Assert-True $localStateText.Contains("chrome-plugin-cache-pending-cleanup") "Local diagnostics should report delayed Chrome plugin cache cleanup state."
 Assert-True $localStateText.Contains("pending-delete.jsonl") "Local diagnostics should inspect the delayed Chrome plugin cleanup manifest."
 
