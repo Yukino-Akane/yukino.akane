@@ -229,6 +229,77 @@ function Get-LazyBrowserRuntimeDetail([string]$EvidenceName) {
     return "Browser runtime has not been triggered in this launch window; $EvidenceName is expected only after a Browser tool call. Installed app-server, Chrome extension, native host, and cache checks still validate the post-install Browser surface."
 }
 
+function Get-SmokeGroupStatus([object[]]$Checks, [string[]]$Names) {
+    $items = @($Checks | Where-Object { $Names -contains $_.Name })
+    if ($items.Count -eq 0) {
+        return "SKIP"
+    }
+    if (@($items | Where-Object { $_.Status -eq "FAIL" }).Count -gt 0) {
+        return "FAIL"
+    }
+    if (@($items | Where-Object { $_.Status -eq "WARN" }).Count -gt 0) {
+        return "WARN"
+    }
+    return "PASS"
+}
+
+function Write-SmokeSummary([object[]]$Checks) {
+    $failures = @($Checks | Where-Object { $_.Status -eq "FAIL" })
+    $warnings = @($Checks | Where-Object { $_.Status -eq "WARN" })
+    $overall = if ($failures.Count -gt 0) { "FAIL" } elseif ($warnings.Count -gt 0) { "WARN" } else { "PASS" }
+
+    $summary = @(
+        [pscustomobject]@{
+            Area = "Startup"
+            Status = Get-SmokeGroupStatus -Checks $Checks -Names @(
+                "installed-yukino-package",
+                "installed-yukino-exe",
+                "running-yukino-process",
+                "app-server-yukino-process",
+                "app-server-log"
+            )
+        },
+        [pscustomobject]@{
+            Area = "Browser runtime"
+            Status = Get-SmokeGroupStatus -Checks $Checks -Names @(
+                "node-repl-yukino-runtime",
+                "browser-use-native-pipe-server",
+                "browser-runtime-yukino-path-log",
+                "browser-runtime-activity-log",
+                "browser-runtime-tab-log"
+            )
+        },
+        [pscustomobject]@{
+            Area = "Chrome extension"
+            Status = Get-SmokeGroupStatus -Checks $Checks -Names @(
+                "chrome-extension-installed",
+                "chrome-native-host-manifest",
+                "chrome-native-host-yukino-target"
+            )
+        },
+        [pscustomobject]@{
+            Area = "Plugin cache"
+            Status = Get-SmokeGroupStatus -Checks $Checks -Names @(
+                "chrome-plugin-cache"
+            )
+        },
+        [pscustomobject]@{
+            Area = "Chrome launch"
+            Status = Get-SmokeGroupStatus -Checks $Checks -Names @(
+                "chrome-open-window"
+            )
+        },
+        [pscustomobject]@{
+            Area = "Overall"
+            Status = $overall
+        }
+    )
+
+    Write-Host ""
+    Write-Host "Yukino post-install summary" -ForegroundColor Cyan
+    $summary | Format-Table -AutoSize
+}
+
 Write-Host ""
 Write-Host "Yukino post-install Browser smoke" -ForegroundColor Cyan
 Write-Host "ProjectRoot: $ProjectRoot"
@@ -439,6 +510,8 @@ else {
 
 Write-Host ""
 $checks | Format-Table -AutoSize -Wrap
+
+Write-SmokeSummary -Checks ($checks.ToArray())
 
 $failures = @($checks | Where-Object { $_.Status -eq "FAIL" })
 $warnings = @($checks | Where-Object { $_.Status -eq "WARN" })

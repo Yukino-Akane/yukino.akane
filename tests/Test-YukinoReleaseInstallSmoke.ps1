@@ -41,6 +41,8 @@ Assert-True $browserSmokeText.Contains("Browser runtime has not been triggered")
 Assert-True $browserSmokeText.Contains("check-extension-installed.js") "Post-install Browser smoke should verify the Chrome extension is installed and enabled."
 Assert-True $browserSmokeText.Contains("check-native-host-manifest.js") "Post-install Browser smoke should verify the Chrome native host manifest."
 Assert-True $browserSmokeText.Contains("open-chrome-window.js") "Post-install Browser smoke should dry-run a harmless Chrome open command."
+Assert-True $browserSmokeText.Contains("Write-SmokeSummary") "Release install smoke should inherit the post-install Browser smoke summary."
+Assert-True $browserSmokeText.Contains("Yukino post-install summary") "Release install smoke output should include a concise post-install summary."
 
 $releaseTestText = [IO.File]::ReadAllText($releaseTest)
 Assert-True $releaseTestText.Contains("Test-YukinoReleaseInstall.ps1") "Release workflow tests should enforce the release install smoke script contract."

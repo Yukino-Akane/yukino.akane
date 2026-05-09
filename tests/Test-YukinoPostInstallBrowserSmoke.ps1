@@ -43,6 +43,13 @@ Assert-True $browserSmokeText.Contains("--dry-run") "Post-install Browser smoke 
 Assert-True $browserSmokeText.Contains("about:blank") "Post-install Browser smoke should only use a harmless URL."
 Assert-True $browserSmokeText.Contains("chrome-native-host-yukino-target") "Post-install Browser smoke should require the native host to target Yukino's cache."
 Assert-True $browserSmokeText.Contains("MinLogTime") "Post-install Browser smoke should support filtering logs to the current launch window."
+Assert-True $browserSmokeText.Contains("Write-SmokeSummary") "Post-install Browser smoke should emit a concise grouped summary."
+Assert-True $browserSmokeText.Contains("Yukino post-install summary") "Post-install Browser smoke should label the grouped summary clearly."
+Assert-True $browserSmokeText.Contains("Startup") "Post-install Browser smoke summary should include startup state."
+Assert-True $browserSmokeText.Contains("Browser runtime") "Post-install Browser smoke summary should include Browser runtime state."
+Assert-True $browserSmokeText.Contains("Chrome extension") "Post-install Browser smoke summary should include Chrome extension state."
+Assert-True $browserSmokeText.Contains("Plugin cache") "Post-install Browser smoke summary should include plugin cache state."
+Assert-True $browserSmokeText.Contains("Overall") "Post-install Browser smoke summary should include an overall result."
 
 $releaseInstallText = [IO.File]::ReadAllText($releaseInstallSmokeScript)
 Assert-True $releaseInstallText.Contains("Test-YukinoPostInstallBrowserSmoke.ps1") "Release install smoke should call the post-install Browser smoke."

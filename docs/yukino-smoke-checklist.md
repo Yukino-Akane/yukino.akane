@@ -78,3 +78,4 @@ For the current stable release baseline, see [yukino-v26.506.3741.1-baseline.md]
 - Download the private release assets through `scripts\Test-YukinoReleaseInstall.ps1 -Tag <tag>`.
 - Confirm `SHA256SUMS.txt` matches the downloaded MSIX.
 - Confirm the published installer path runs, `verify-yukino.ps1` passes, Yukino launches, and post-install Browser smoke runs.
+- Confirm the post-install summary reports Startup, Browser runtime, Chrome extension, Plugin cache, Chrome launch, and Overall in one table.

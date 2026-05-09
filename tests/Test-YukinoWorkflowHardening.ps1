@@ -56,6 +56,7 @@ foreach ($needle in @(
     "Release Safety",
     "Manual GUI Smoke",
     "Release Install Smoke",
+    "post-install summary",
     "Plugins page opens",
     "Skills page still opens",
     "settings write",
