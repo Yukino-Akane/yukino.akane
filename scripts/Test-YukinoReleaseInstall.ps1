@@ -4,6 +4,7 @@ param(
     [string]$Tag = "",
     [string]$PackageName = "yukino.akane",
     [switch]$SkipLaunch,
+    [switch]$SkipBrowserSmoke,
     [switch]$KeepDownloadedAssets
 )
 
@@ -55,6 +56,10 @@ $project = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
 $verifyScript = Join-Path $project "verify-yukino.ps1"
 if (-not (Test-Path -LiteralPath $verifyScript)) {
     throw "Missing verification script: $verifyScript"
+}
+$browserSmokeScript = Join-Path $project "scripts\Test-YukinoPostInstallBrowserSmoke.ps1"
+if (-not (Test-Path -LiteralPath $browserSmokeScript)) {
+    throw "Missing post-install Browser smoke script: $browserSmokeScript"
 }
 
 $releaseTag = Resolve-ReleaseTag -ExplicitTag $Tag -ProjectRoot $project -Repo $Repo
@@ -113,6 +118,7 @@ try {
         if (-not (Test-Path -LiteralPath $exe)) {
             throw "Installed executable not found: $exe"
         }
+        $launchStart = Get-Date
         $process = Start-Process -FilePath $exe -PassThru
         Start-Sleep -Seconds 8
         $running = @(Get-Process -Name "Yukino" -ErrorAction SilentlyContinue)
@@ -120,6 +126,16 @@ try {
             throw "Yukino did not remain running after launch smoke."
         }
         Write-Host "Launch smoke: started process $($process.Id); running Yukino process count $($running.Count)."
+
+        if (-not $SkipBrowserSmoke) {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $browserSmokeScript -ProjectRoot $project -PackageName $PackageName -MinLogTime $launchStart
+            if ($LASTEXITCODE -ne 0) {
+                throw "Test-YukinoPostInstallBrowserSmoke.ps1 failed after release installation."
+            }
+        }
+    }
+    elseif (-not $SkipBrowserSmoke) {
+        Write-Host "Post-install Browser smoke skipped because -SkipLaunch was set."
     }
 
     [pscustomobject]@{

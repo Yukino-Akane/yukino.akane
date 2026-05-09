@@ -161,6 +161,37 @@ function Patch-TextTreeBranding([string]$Root, [string]$PackageName, [string]$Di
     return $patched
 }
 
+function Patch-ChromeNativeHostCompatibility([string]$ResourcesRoot) {
+    $chromePluginRoot = Join-Path $ResourcesRoot "plugins\openai-bundled\plugins\chrome"
+    if (-not (Test-Path -LiteralPath $chromePluginRoot)) {
+        return 0
+    }
+
+    $patched = 0
+    $publicHostName = "com.openai.codexextension"
+    $extensionIdRelative = "plugins\openai-bundled\plugins\chrome\scripts\extension-id.json"
+    $extensionIdPath = Join-Path $ResourcesRoot $extensionIdRelative
+    if (Test-Path -LiteralPath $extensionIdPath) {
+        $config = Get-Content -Raw -LiteralPath $extensionIdPath | ConvertFrom-Json
+        $config.extensionHostName = $publicHostName
+        $json = $config | ConvertTo-Json -Depth 8
+        [IO.File]::WriteAllText($extensionIdPath, ($json + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    $installManifestPath = Join-Path $chromePluginRoot "scripts\installManifest.mjs"
+    if (Test-Path -LiteralPath $installManifestPath) {
+        $text = [IO.File]::ReadAllText($installManifestPath)
+        $updated = [regex]::Replace($text, 'extensionHostName:"[^"]+"', 'extensionHostName:"com.openai.codexextension"')
+        if ($updated -ne $text) {
+            [IO.File]::WriteAllText($installManifestPath, $updated, [Text.UTF8Encoding]::new($false))
+            $patched += 1
+        }
+    }
+
+    return $patched
+}
+
 function Patch-UpdaterIsolation([string]$BootstrapPath) {
     $text = [IO.File]::ReadAllText($BootstrapPath)
     $marker = "Yukino updater disabled"
@@ -242,26 +273,39 @@ function Patch-UnsupportedExperimentalFeatureSync([string]$AssetsDir) {
         return
     }
 
-    $pattern = 'var\s+([A-Za-z_$][A-Za-z0-9_$]*)=\[`apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`,[A-Za-z_$][A-Za-z0-9_$]*\];function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(\)\{'
+    $legacyPattern = 'var\s+([A-Za-z_$][A-Za-z0-9_$]*)=\[`apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`,[A-Za-z_$][A-Za-z0-9_$]*\];function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(\)\{'
+    $setPattern = "new Set\(\[(?<features>[^\]]*?``tool_call_mcp_elicitation``[^\]]*?)\]\),(?<workspaceVar>[A-Za-z_`$][A-Za-z0-9_`$]*)=``workspace_dependencies``"
     $patched = 0
-    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "index-*.js") {
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
-        if ($text -notmatch $pattern) {
+        if ($text -notmatch $legacyPattern -and $text -notmatch $setPattern) {
             continue
         }
 
-        $text = [regex]::Replace(
+        $newText = [regex]::Replace(
             $text,
-            $pattern,
+            $legacyPattern,
             'var $1=[`apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`];function $2(){',
             1
         )
-        [IO.File]::WriteAllText($asset.FullName, $text, [Text.UTF8Encoding]::new($false))
+        $setRegex = [regex]::new($setPattern)
+        $newText = $setRegex.Replace($newText, {
+            param($match)
+            $features = $match.Groups["features"].Value
+            $workspaceVar = $match.Groups["workspaceVar"].Value
+            $filteredFeatures = (($features -split ",") | Where-Object { $_ -ne '`workspace_dependencies`' }) -join ","
+            return 'new Set([' + $filteredFeatures + ']),' + $workspaceVar + '=`workspace_dependencies`'
+        }, 1)
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 
     if ($patched -gt 0) {
-        Write-Host "Yukino unsupported experimental features filtered in $patched webview entry file(s)"
+        Write-Host "Yukino unsupported experimental feature sync filtered in $patched webview asset file(s)"
     }
 }
 
@@ -678,6 +722,11 @@ function Patch-LooseResources([string]$ResourcesRoot, [string]$PackageName, [str
             Write-Host "Patched $patched loose resource file(s) under $relative"
         }
     }
+
+    $chromeCompatibilityPatched = Patch-ChromeNativeHostCompatibility -ResourcesRoot $ResourcesRoot
+    if ($chromeCompatibilityPatched -gt 0) {
+        Write-Host "Preserved Chrome native host compatibility in $chromeCompatibilityPatched bundled plugin file(s)"
+    }
 }
 
 function Patch-AsarHash([string]$ExePath, [string]$OldHash, [string]$NewHash) {
@@ -763,7 +812,10 @@ Patch-LooseResources -ResourcesRoot $resources -PackageName $PackageName -Displa
 
 Write-Step "Validate patched JavaScript"
 $failed = @()
-foreach ($file in Get-ChildItem -LiteralPath (Join-Path $extractDir ".vite\build") -File -Filter "*.js") {
+foreach ($file in @(
+    Get-ChildItem -LiteralPath (Join-Path $extractDir ".vite\build") -File -Filter "*.js" -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath (Join-Path $extractDir "webview\assets") -File -Filter "*.js" -ErrorAction SilentlyContinue
+)) {
     node --check $file.FullName
     if ($LASTEXITCODE -ne 0) {
         $failed += $file.Name

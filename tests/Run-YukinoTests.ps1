@@ -6,6 +6,7 @@ $tests = @(
     "Test-YukinoBuildProcessSafety.ps1",
     "Test-YukinoReleaseWorkflow.ps1",
     "Test-YukinoReleaseInstallSmoke.ps1",
+    "Test-YukinoPostInstallBrowserSmoke.ps1",
     "Test-YukinoPluginAuthGatePatch.ps1",
     "Test-YukinoSidebarBackground.ps1",
     "Test-YukinoIconAssets.ps1",
@@ -16,6 +17,10 @@ $tests = @(
     "Test-YukinoVerificationWarnings.ps1",
     "Test-YukinoLocalState.ps1",
     "Test-YukinoSettingsDiagnosticsEntry.ps1",
+    "Test-YukinoBrowserRuntimeDiagnostics.ps1",
+    "Test-YukinoChromePluginDiagnostics.ps1",
+    "Test-YukinoChromePluginCacheRepair.ps1",
+    "Test-YukinoUnsupportedFeatureSyncPatch.ps1",
     "Test-YukinoControlHome.ps1"
 )
 

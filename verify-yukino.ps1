@@ -33,6 +33,8 @@ $settingsPageSectionMapRegex = '\{[^{}]*"plugins-settings":[A-Za-z_$][A-Za-z0-9_
 $settingsLocalDiagnosticsLabel = 'settings.agent.dependencies.localDiagnostics.label'
 $settingsLocalDiagnosticsCommand = 'npm run diagnose'
 $settingsLocalDiagnosticsScript = 'scripts/Test-YukinoLocalState.ps1'
+$chromeExtensionId = "hehggadaopoacecdllhhajmbjkdcmajg"
+$chromeNativeHostName = "com.openai.codexextension"
 
 Add-Type -AssemblyName System.Drawing
 
@@ -72,6 +74,208 @@ function Get-FirstFileText([object[]]$Files) {
         return $null
     }
     return [IO.File]::ReadAllText($Files[0].FullName)
+}
+
+function Test-ChromePluginCache([string]$PluginRoot) {
+    $result = [pscustomobject]@{
+        Exists = (Test-Path -LiteralPath $PluginRoot)
+        Complete = $false
+        Missing = @()
+        ExtensionId = ""
+        ExtensionHostName = ""
+        InstallManifestHostName = ""
+        Path = $PluginRoot
+    }
+    if (-not $result.Exists) {
+        $result.Missing = @($PluginRoot)
+        return $result
+    }
+
+    $required = @(
+        ".codex-plugin\plugin.json",
+        "assets",
+        "scripts\extension-id.json",
+        "scripts\installManifest.mjs",
+        "extension-host\windows\x64\extension-host.exe"
+    )
+    $missing = @()
+    foreach ($relative in $required) {
+        $path = Join-Path $PluginRoot $relative
+        if (-not (Test-Path -LiteralPath $path)) {
+            $missing += $relative
+        }
+    }
+
+    $extensionIdPath = Join-Path $PluginRoot "scripts\extension-id.json"
+    if (Test-Path -LiteralPath $extensionIdPath) {
+        try {
+            $config = Get-Content -Raw -LiteralPath $extensionIdPath | ConvertFrom-Json
+            $result.ExtensionId = [string]$config.extensionId
+            $result.ExtensionHostName = [string]$config.extensionHostName
+        }
+        catch {
+            $missing += "scripts\extension-id.json: invalid JSON"
+        }
+    }
+
+    $installManifestPath = Join-Path $PluginRoot "scripts\installManifest.mjs"
+    if (Test-Path -LiteralPath $installManifestPath) {
+        $manifestText = [IO.File]::ReadAllText($installManifestPath)
+        $match = [regex]::Match($manifestText, 'extensionHostName:"([^"]+)"')
+        if ($match.Success) {
+            $result.InstallManifestHostName = $match.Groups[1].Value
+        }
+        else {
+            $missing += "scripts\installManifest.mjs: missing extensionHostName"
+        }
+    }
+
+    if ($result.ExtensionId -ne $chromeExtensionId) {
+        $missing += "scripts\extension-id.json: extensionId should be $chromeExtensionId"
+    }
+    if ($result.ExtensionHostName -ne $chromeNativeHostName) {
+        $missing += "scripts\extension-id.json: extensionHostName should be $chromeNativeHostName"
+    }
+    if ($result.InstallManifestHostName -ne $chromeNativeHostName) {
+        $missing += "scripts\installManifest.mjs: extensionHostName should be $chromeNativeHostName"
+    }
+
+    $result.Missing = @($missing)
+    $result.Complete = $result.Missing.Count -eq 0
+    return $result
+}
+
+function Add-ChromePluginCacheCheck([string]$Name, [string]$PluginRoot) {
+    $result = Test-ChromePluginCache -PluginRoot $PluginRoot
+    if ($result.Complete) {
+        Add-Check $Name "PASS" $PluginRoot
+    }
+    else {
+        Add-Check $Name "FAIL" "Incomplete Chrome plugin cache at $PluginRoot; missing or invalid: $($result.Missing -join '; ')"
+    }
+}
+
+function Add-InstalledChromePluginCacheCheck([string]$PluginRoot) {
+    $result = Test-ChromePluginCache -PluginRoot $PluginRoot
+    if ($result.Complete) {
+        Add-Check "installed-chrome-plugin-cache" "PASS" $PluginRoot
+        return
+    }
+
+    $repairScript = Join-Path $ProjectRoot "scripts\Repair-YukinoChromePluginCache.ps1"
+    if (Test-Path -LiteralPath $repairScript) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $repairScript | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $repairedResult = Test-ChromePluginCache -PluginRoot $PluginRoot
+            if ($repairedResult.Complete) {
+                Add-Check "installed-chrome-plugin-cache" "PASS" "Repaired incomplete Chrome plugin cache at $PluginRoot"
+                return
+            }
+            Add-Check "installed-chrome-plugin-cache" "FAIL" "Repair ran, but Chrome plugin cache remains incomplete at $PluginRoot; missing or invalid: $($repairedResult.Missing -join '; ')"
+            return
+        }
+    }
+
+    Add-Check "installed-chrome-plugin-cache" "FAIL" "Incomplete Chrome plugin cache at $PluginRoot; missing or invalid: $($result.Missing -join '; ')"
+}
+
+function Get-RegistryDefaultValue([string]$RegistryKey) {
+    $output = & reg query $RegistryKey /ve 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        return $null
+    }
+    foreach ($line in $output) {
+        $match = [regex]::Match($line, '^\s*\(Default\)\s+REG_\w+\s+(.+?)\s*$')
+        if ($match.Success) {
+            return $match.Groups[1].Value.Trim('"')
+        }
+    }
+    return $null
+}
+
+function Test-ChromeNativeHostYukinoTarget {
+    $registryKey = "HKCU\Software\Google\Chrome\NativeMessagingHosts\$chromeNativeHostName"
+    $manifestPath = Get-RegistryDefaultValue $registryKey
+    if (-not $manifestPath) {
+        return [pscustomobject]@{ Correct = $false; Detail = "Missing registry key: $registryKey" }
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        return [pscustomobject]@{ Correct = $false; Detail = "Registry manifest path does not exist: $manifestPath" }
+    }
+
+    try {
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{ Correct = $false; Detail = "Invalid native host manifest JSON: $manifestPath" }
+    }
+
+    $expectedOrigin = "chrome-extension://$chromeExtensionId/"
+    $hostPath = [string]$manifest.path
+    $allowedOrigins = @($manifest.allowed_origins)
+    $problems = @()
+    if ($manifest.name -ne $chromeNativeHostName) {
+        $problems += "name=$($manifest.name)"
+    }
+    if ($hostPath -notlike "*\.yukino\plugins\cache\openai-bundled\chrome\latest\extension-host\windows\x64\extension-host.exe") {
+        $problems += "path=$hostPath"
+    }
+    if ($allowedOrigins -notcontains $expectedOrigin) {
+        $problems += "allowed_origins missing $expectedOrigin"
+    }
+
+    if ($problems.Count -gt 0) {
+        return [pscustomobject]@{ Correct = $false; Detail = "$manifestPath; $($problems -join '; ')" }
+    }
+
+    return [pscustomobject]@{ Correct = $true; Detail = "$manifestPath -> $hostPath" }
+}
+
+function Test-UnsupportedFeatureSyncPatched([string]$AssetsDir) {
+    $result = [pscustomobject]@{
+        MissingAssets = $false
+        CandidateCount = 0
+        PatchedCount = 0
+        StaleCount = 0
+        SyntaxRiskCount = 0
+        FirstCandidate = ""
+        FirstSyntaxRisk = ""
+    }
+
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        $result.MissingAssets = $true
+        return $result
+    }
+
+    $syncFilterPattern = "new Set\(\[(?<features>[^\]]*?``tool_call_mcp_elicitation``[^\]]*?)\]\),(?<workspaceVar>[A-Za-z_`$][A-Za-z0-9_`$]*)=``workspace_dependencies``"
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "*.js" -ErrorAction SilentlyContinue) {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not ($text.Contains("workspace_dependencies") -and $text.Contains("tool_call_mcp_elicitation") -and $text.Contains("new Set(["))) {
+            continue
+        }
+
+        if ($text.Contains('workspace_dependencies``')) {
+            $result.SyntaxRiskCount += 1
+            if (-not $result.FirstSyntaxRisk) {
+                $result.FirstSyntaxRisk = $asset.FullName
+            }
+        }
+
+        foreach ($match in [regex]::Matches($text, $syncFilterPattern)) {
+            $result.CandidateCount += 1
+            if (-not $result.FirstCandidate) {
+                $result.FirstCandidate = $asset.FullName
+            }
+            if ($match.Groups["features"].Value.Contains('`workspace_dependencies`')) {
+                $result.StaleCount += 1
+            }
+            else {
+                $result.PatchedCount += 1
+            }
+        }
+    }
+
+    return $result
 }
 
 function Get-BitmapPixelSha256([System.Drawing.Bitmap]$Bitmap) {
@@ -176,6 +380,22 @@ else {
 }
 
 if ($latestBuild) {
+    $latestBuildChromePluginRoot = $null
+    $verifyUnpackRoot = $null
+    if (Test-Path -LiteralPath $outRoot) {
+        $verifyUnpackRoot = Get-ChildItem -LiteralPath $outRoot -Directory -Filter "verify-unpack-*" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+    }
+    if ($verifyUnpackRoot) {
+        $latestBuildChromePluginRoot = Join-Path $verifyUnpackRoot.FullName "app\resources\plugins\openai-bundled\plugins\chrome"
+    }
+    else {
+        $srcUnpackedChromePluginRoot = Join-Path $ProjectRoot "src_unpacked\app\resources\plugins\openai-bundled\plugins\chrome"
+        $latestBuildChromePluginRoot = $srcUnpackedChromePluginRoot
+    }
+    Add-ChromePluginCacheCheck "chrome-plugin-build-cache" $latestBuildChromePluginRoot
+
     $assetsDir = Join-Path $latestBuild.FullName "app-extracted\webview\assets"
     if (Test-Path -LiteralPath $assetsDir) {
         $agentAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "agent-settings-*.js")
@@ -221,6 +441,23 @@ if ($latestBuild) {
         }
         else {
             Add-Check "settings-local-diagnostics-entry" "FAIL" "Missing Yukino local diagnostics entry in Agent Settings maintenance"
+        }
+
+        $unsupportedFeatureSync = Test-UnsupportedFeatureSyncPatched -AssetsDir $assetsDir
+        if ($unsupportedFeatureSync.CandidateCount -eq 0) {
+            Add-Check "unsupported-feature-sync-patch" "FAIL" "Expected workspace_dependencies experimental feature sync filter not found in latest build assets"
+        }
+        elseif ($unsupportedFeatureSync.SyntaxRiskCount -gt 0) {
+            Add-Check "unsupported-feature-sync-patch" "FAIL" "workspace_dependencies patch left malformed template literal syntax in $($unsupportedFeatureSync.FirstSyntaxRisk)"
+        }
+        elseif ($unsupportedFeatureSync.StaleCount -gt 0) {
+            Add-Check "unsupported-feature-sync-patch" "FAIL" "workspace_dependencies remains outside the unsupported experimental feature sync filter in $($unsupportedFeatureSync.FirstCandidate)"
+        }
+        elseif ($unsupportedFeatureSync.PatchedCount -gt 0) {
+            Add-Check "unsupported-feature-sync-patch" "PASS" "workspace_dependencies is filtered from config sync in $($unsupportedFeatureSync.FirstCandidate)"
+        }
+        else {
+            Add-Check "unsupported-feature-sync-patch" "FAIL" "workspace_dependencies experimental feature sync filter could not be evaluated"
         }
 
         $gatePattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'
@@ -448,6 +685,23 @@ if ($installed) {
             ) | Sort-Object FullName -Unique
             $installedSidebarBackgroundAsset = Join-Path $installedAssetsDir "yukino-sidebar-background.png"
 
+            $installedUnsupportedFeatureSync = Test-UnsupportedFeatureSyncPatched -AssetsDir $installedAssetsDir
+            if ($installedUnsupportedFeatureSync.CandidateCount -eq 0) {
+                Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Installed app.asar does not contain the workspace_dependencies experimental feature sync filter"
+            }
+            elseif ($installedUnsupportedFeatureSync.SyntaxRiskCount -gt 0) {
+                Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Installed app.asar contains malformed workspace_dependencies template literal syntax; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedUnsupportedFeatureSync.StaleCount -gt 0) {
+                Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Installed app.asar can still sync unsupported workspace_dependencies enablement; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedUnsupportedFeatureSync.PatchedCount -gt 0) {
+                Add-Check "installed-unsupported-feature-sync-patch" "PASS" $installedAsar
+            }
+            else {
+                Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Installed workspace_dependencies experimental feature sync filter could not be evaluated"
+            }
+
             $installedHasPatchedWrite = $false
             $installedHasStaleWrite = $false
             foreach ($asset in $installedAgentAssets) {
@@ -600,6 +854,7 @@ if ($installed) {
         }
         catch {
             Add-Check "installed-agent-settings-patch" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
+            Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
             Add-Check "installed-plugin-auth-gate" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
             Add-Check "installed-sidebar-plugin-route" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
             Add-Check "installed-sidebar-background-patch" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
@@ -612,6 +867,7 @@ if ($installed) {
     }
     else {
         Add-Check "installed-agent-settings-patch" "FAIL" "Missing installed app.asar: $installedAsar"
+        Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-plugin-auth-gate" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-sidebar-plugin-route" "FAIL" "Missing installed app.asar: $installedAsar"
         Add-Check "installed-sidebar-background-patch" "FAIL" "Missing installed app.asar: $installedAsar"
@@ -619,6 +875,7 @@ if ($installed) {
 }
 else {
     Add-Check "installed-package" "FAIL" "Package $PackageName is not installed"
+    Add-Check "installed-unsupported-feature-sync-patch" "FAIL" "Package $PackageName is not installed"
 }
 
 if (Test-Path -LiteralPath $outRoot) {
@@ -688,9 +945,27 @@ if (Test-Path -LiteralPath $ConfigPath) {
     else {
         Add-Check "config-browser-use-plugin" "WARN" "browser-use@openai-bundled enabled=true not found"
     }
+
+    if (Test-TomlSectionBoolean $configText 'plugins\."chrome@openai-bundled"' "enabled" $true) {
+        Add-Check "config-chrome-plugin" "PASS" "chrome@openai-bundled enabled"
+    }
+    else {
+        Add-Check "config-chrome-plugin" "WARN" "chrome@openai-bundled enabled=true not found"
+    }
 }
 else {
     Add-Check "config-file" "FAIL" "Missing config: $ConfigPath"
+}
+
+$installedChromePluginRoot = Join-Path $env:USERPROFILE ".yukino\plugins\cache\openai-bundled\chrome\latest"
+Add-InstalledChromePluginCacheCheck $installedChromePluginRoot
+
+$nativeHostStatus = Test-ChromeNativeHostYukinoTarget
+if ($nativeHostStatus.Correct) {
+    Add-Check "chrome-native-host-yukino-target" "PASS" $nativeHostStatus.Detail
+}
+else {
+    Add-Check "chrome-native-host-yukino-target" "FAIL" $nativeHostStatus.Detail
 }
 
 $logDate = Get-Date
@@ -701,10 +976,14 @@ if (Test-Path -LiteralPath $appLogDir) {
         Select-Object -First $RecentLogFileCount)
     $records = @()
     $configErrorRecords = @()
+    $pluginCacheLockLines = @()
     foreach ($file in $logFiles) {
-        $matches = Select-String -LiteralPath $file.FullName -Pattern "config/batchWrite|configVersionConflict|Unable to save|errorCode=-32600|method=config/" -ErrorAction SilentlyContinue
+        $matches = Select-String -LiteralPath $file.FullName -Pattern "config/batchWrite|configVersionConflict|Unable to save|errorCode=-32600|method=config/|plugin_cache_windows_file_lock" -ErrorAction SilentlyContinue
         foreach ($match in $matches) {
             $line = $match.Line
+            if ($line -like "*plugin_cache_windows_file_lock*") {
+                $pluginCacheLockLines += "$($file.Name):$($match.LineNumber):$line"
+            }
             $timestampMatch = [regex]::Match($line, '^(\d{4}-\d{2}-\d{2}T[^ ]+)')
             $timestamp = if ($timestampMatch.Success) { $timestampMatch.Groups[1].Value } else { "" }
             $record = [pscustomobject]@{
@@ -754,6 +1033,13 @@ if (Test-Path -LiteralPath $appLogDir) {
     }
     else {
         Add-Check "recent-config-conflicts" "WARN" "$($conflictRecords.Count) older conflict-related line(s) found in latest $RecentLogFileCount log file(s)"
+    }
+
+    if ($pluginCacheLockLines.Count -eq 0) {
+        Add-Check "plugin_cache_windows_file_lock" "PASS" "No Chrome plugin cache lock failures in latest $RecentLogFileCount log file(s)"
+    }
+    else {
+        Add-Check "plugin_cache_windows_file_lock" "WARN" "$($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
     }
 }
 else {

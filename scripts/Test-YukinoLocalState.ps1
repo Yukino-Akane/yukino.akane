@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $checks = New-Object System.Collections.Generic.List[object]
+$chromeExtensionId = "hehggadaopoacecdllhhajmbjkdcmajg"
+$chromeNativeHostName = "com.openai.codexextension"
 
 function Add-Check([string]$Name, [string]$Status, [string]$Detail) {
     $checks.Add([pscustomobject]@{
@@ -40,6 +42,241 @@ function Get-LogField([string]$Line, [string]$Name) {
     $match = [regex]::Match($Line, '(?:^|\s)' + [regex]::Escape($Name) + '=([^ ]+)')
     if ($match.Success) {
         return $match.Groups[1].Value
+    }
+    return ""
+}
+
+function Test-ChromePluginCache([string]$PluginRoot) {
+    $result = [pscustomobject]@{
+        Exists = (Test-Path -LiteralPath $PluginRoot)
+        Complete = $false
+        Missing = @()
+        ExtensionId = ""
+        ExtensionHostName = ""
+        InstallManifestHostName = ""
+        Path = $PluginRoot
+    }
+    if (-not $result.Exists) {
+        $result.Missing = @($PluginRoot)
+        return $result
+    }
+
+    $required = @(
+        ".codex-plugin\plugin.json",
+        "assets",
+        "scripts\extension-id.json",
+        "scripts\installManifest.mjs",
+        "extension-host\windows\x64\extension-host.exe"
+    )
+    $missing = @()
+    foreach ($relative in $required) {
+        if (-not (Test-Path -LiteralPath (Join-Path $PluginRoot $relative))) {
+            $missing += $relative
+        }
+    }
+
+    $extensionIdPath = Join-Path $PluginRoot "scripts\extension-id.json"
+    if (Test-Path -LiteralPath $extensionIdPath) {
+        try {
+            $config = Get-Content -Raw -LiteralPath $extensionIdPath | ConvertFrom-Json
+            $result.ExtensionId = [string]$config.extensionId
+            $result.ExtensionHostName = [string]$config.extensionHostName
+        }
+        catch {
+            $missing += "scripts\extension-id.json: invalid JSON"
+        }
+    }
+
+    $installManifestPath = Join-Path $PluginRoot "scripts\installManifest.mjs"
+    if (Test-Path -LiteralPath $installManifestPath) {
+        $text = [IO.File]::ReadAllText($installManifestPath)
+        $match = [regex]::Match($text, 'extensionHostName:"([^"]+)"')
+        if ($match.Success) {
+            $result.InstallManifestHostName = $match.Groups[1].Value
+        }
+        else {
+            $missing += "scripts\installManifest.mjs: missing extensionHostName"
+        }
+    }
+
+    if ($result.ExtensionId -ne $chromeExtensionId) {
+        $missing += "scripts\extension-id.json: extensionId should be $chromeExtensionId"
+    }
+    if ($result.ExtensionHostName -ne $chromeNativeHostName) {
+        $missing += "scripts\extension-id.json: extensionHostName should be $chromeNativeHostName"
+    }
+    if ($result.InstallManifestHostName -ne $chromeNativeHostName) {
+        $missing += "scripts\installManifest.mjs: extensionHostName should be $chromeNativeHostName"
+    }
+
+    $result.Missing = @($missing)
+    $result.Complete = $result.Missing.Count -eq 0
+    return $result
+}
+
+function Get-RegistryDefaultValue([string]$RegistryKey) {
+    $output = & reg query $RegistryKey /ve 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+        return $null
+    }
+    foreach ($line in $output) {
+        $match = [regex]::Match($line, '^\s*\(Default\)\s+REG_\w+\s+(.+?)\s*$')
+        if ($match.Success) {
+            return $match.Groups[1].Value.Trim('"')
+        }
+    }
+    return $null
+}
+
+function Test-ChromeNativeHostYukinoTarget {
+    $registryKey = "HKCU\Software\Google\Chrome\NativeMessagingHosts\$chromeNativeHostName"
+    $manifestPath = Get-RegistryDefaultValue $registryKey
+    if (-not $manifestPath) {
+        return [pscustomobject]@{ Correct = $false; Detail = "Missing registry key: $registryKey" }
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        return [pscustomobject]@{ Correct = $false; Detail = "Registry manifest path does not exist: $manifestPath" }
+    }
+
+    try {
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{ Correct = $false; Detail = "Invalid native host manifest JSON: $manifestPath" }
+    }
+
+    $expectedOrigin = "chrome-extension://$chromeExtensionId/"
+    $hostPath = [string]$manifest.path
+    $allowedOrigins = @($manifest.allowed_origins)
+    $problems = @()
+    if ($manifest.name -ne $chromeNativeHostName) {
+        $problems += "name=$($manifest.name)"
+    }
+    if ($hostPath -notlike "*\.yukino\plugins\cache\openai-bundled\chrome\latest\extension-host\windows\x64\extension-host.exe") {
+        $problems += "path=$hostPath"
+    }
+    if ($allowedOrigins -notcontains $expectedOrigin) {
+        $problems += "allowed_origins missing $expectedOrigin"
+    }
+
+    if ($problems.Count -gt 0) {
+        return [pscustomobject]@{ Correct = $false; Detail = "$manifestPath; $($problems -join '; ')" }
+    }
+
+    return [pscustomobject]@{ Correct = $true; Detail = "$manifestPath -> $hostPath" }
+}
+
+function Add-InstalledChromePluginCacheCheck([string]$PluginRoot) {
+    $result = Test-ChromePluginCache -PluginRoot $PluginRoot
+    if ($result.Complete) {
+        Add-Check "installed-chrome-plugin-cache" "PASS" $PluginRoot
+        return
+    }
+
+    $repairScript = Join-Path $ProjectRoot "scripts\Repair-YukinoChromePluginCache.ps1"
+    if (Test-Path -LiteralPath $repairScript) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $repairScript | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $repairedResult = Test-ChromePluginCache -PluginRoot $PluginRoot
+            if ($repairedResult.Complete) {
+                Add-Check "installed-chrome-plugin-cache" "PASS" "Repaired incomplete Chrome plugin cache at $PluginRoot"
+                return
+            }
+            Add-Check "installed-chrome-plugin-cache" "WARN" "Repair ran, but Chrome plugin cache remains incomplete at $PluginRoot; missing or invalid: $($repairedResult.Missing -join '; ')"
+            return
+        }
+    }
+
+    Add-Check "installed-chrome-plugin-cache" "WARN" "Incomplete Chrome plugin cache at $PluginRoot; missing or invalid: $($result.Missing -join '; ')"
+}
+
+function Get-SessionDynamicToolNames {
+    $sessionsRoot = Join-Path $env:USERPROFILE ".yukino\sessions"
+    $empty = [pscustomobject]@{
+        SessionPath = ""
+        ToolNames = @()
+        Error = ""
+    }
+    if (-not (Test-Path -LiteralPath $sessionsRoot)) {
+        $empty.Error = "Missing sessions directory: $sessionsRoot"
+        return $empty
+    }
+
+    $latestSession = Get-ChildItem -LiteralPath $sessionsRoot -File -Filter "rollout-*.jsonl" -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if (-not $latestSession) {
+        $empty.Error = "No rollout session files found under $sessionsRoot"
+        return $empty
+    }
+
+    try {
+        $stream = [IO.File]::Open($latestSession.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        try {
+            $reader = New-Object IO.StreamReader($stream)
+            try {
+                while (-not $reader.EndOfStream) {
+                    $line = $reader.ReadLine()
+                    if (-not $line -or $line -notlike '*"session_meta"*') {
+                        continue
+                    }
+                    try {
+                        $record = $line | ConvertFrom-Json
+                    }
+                    catch {
+                        continue
+                    }
+                    if ($record.type -ne "session_meta") {
+                        continue
+                    }
+
+                    $toolNames = @()
+                    foreach ($tool in @($record.payload.dynamic_tools)) {
+                        if ($tool -is [string]) {
+                            $toolNames += $tool
+                        }
+                        elseif ($tool.name) {
+                            $toolNames += [string]$tool.name
+                        }
+                        elseif ($tool.function -and $tool.function.name) {
+                            $toolNames += [string]$tool.function.name
+                        }
+                    }
+                    return [pscustomobject]@{
+                        SessionPath = $latestSession.FullName
+                        ToolNames = @($toolNames | Where-Object { $_ } | Sort-Object -Unique)
+                        Error = ""
+                    }
+                }
+            }
+            finally {
+                $reader.Dispose()
+            }
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            SessionPath = $latestSession.FullName
+            ToolNames = @()
+            Error = $_.Exception.Message
+        }
+    }
+
+    return [pscustomobject]@{
+        SessionPath = $latestSession.FullName
+        ToolNames = @()
+        Error = "No session_meta record found"
+    }
+}
+
+function Get-ProcessPathById([int]$ProcessId) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($process -and $process.ExecutablePath) {
+        return $process.ExecutablePath
     }
     return ""
 }
@@ -153,9 +390,86 @@ if (Test-Path -LiteralPath $ConfigPath) {
     else {
         Add-Check "config-browser-use-plugin" "WARN" "browser-use@openai-bundled enabled=true not found"
     }
+
+    if (Test-TomlSectionBoolean $configText 'plugins\."chrome@openai-bundled"' "enabled" $true) {
+        Add-Check "config-chrome-plugin" "PASS" "chrome@openai-bundled enabled"
+    }
+    else {
+        Add-Check "config-chrome-plugin" "WARN" "chrome@openai-bundled enabled=true not found"
+    }
 }
 else {
     Add-Check "config-file" "FAIL" "Missing config: $ConfigPath"
+}
+
+$installedChromePluginRoot = Join-Path $env:USERPROFILE ".yukino\plugins\cache\openai-bundled\chrome\latest"
+Add-InstalledChromePluginCacheCheck $installedChromePluginRoot
+
+$nativeHostStatus = Test-ChromeNativeHostYukinoTarget
+if ($nativeHostStatus.Correct) {
+    Add-Check "chrome-native-host-yukino-target" "PASS" $nativeHostStatus.Detail
+}
+else {
+    Add-Check "chrome-native-host-yukino-target" "WARN" $nativeHostStatus.Detail
+}
+
+$sessionTools = Get-SessionDynamicToolNames
+if ($sessionTools.Error) {
+    Add-Check "session-dynamic-tools" "WARN" $sessionTools.Error
+}
+else {
+    $toolNames = @($sessionTools.ToolNames)
+    $toolSummary = if ($toolNames.Count -gt 0) { $toolNames -join ", " } else { "(none)" }
+    Add-Check "session-dynamic-tools" "PASS" "$($toolNames.Count) dynamic tool(s) in latest session metadata $($sessionTools.SessionPath): $toolSummary"
+}
+
+$nodeReplProcesses = @(Get-CimInstance Win32_Process -Filter "Name='node_repl.exe'" -ErrorAction SilentlyContinue)
+$details = @()
+$hasYukinoNodeRepl = $false
+$hasOfficialNodeRepl = $false
+foreach ($process in $nodeReplProcesses) {
+    $exePath = $process.ExecutablePath
+    $parentPath = Get-ProcessPathById -ProcessId ([int]$process.ParentProcessId)
+    if ($exePath -like "*\OpenAI\Yukino\bin\node_repl.exe" -or $parentPath -like "*\yukino.akane_*") {
+        $hasYukinoNodeRepl = $true
+    }
+    if ($exePath -like "*\OpenAI\Codex\bin\node_repl.exe" -or $parentPath -like "*\OpenAI.Codex_*") {
+        $hasOfficialNodeRepl = $true
+    }
+    $details += "pid=$($process.ProcessId); parent=$($process.ParentProcessId); exe=$exePath; parentExe=$parentPath"
+}
+
+if (-not $sessionTools.Error) {
+    if ($toolNames -contains "mcp__node_repl__js" -or $toolNames -contains "node_repl" -or $toolNames -contains "js") {
+        Add-Check "session-node-repl-tool" "PASS" "Browser execution tool is exposed in latest session metadata"
+    }
+    elseif ($hasYukinoNodeRepl) {
+        Add-Check "session-node-repl-tool" "PASS" "Latest session metadata lacks Browser tool, but a live Yukino node_repl runtime is present"
+    }
+    else {
+        Add-Check "session-node-repl-tool" "WARN" "No browser execution tool in latest session metadata; expected mcp__node_repl__js/node_repl/js for Browser control"
+    }
+}
+elseif ($hasYukinoNodeRepl) {
+    Add-Check "session-node-repl-tool" "PASS" "Could not inspect session metadata, but a live Yukino node_repl runtime is present"
+}
+else {
+    Add-Check "session-node-repl-tool" "WARN" "Could not inspect current session dynamic tools"
+}
+
+if ($nodeReplProcesses.Count -eq 0) {
+    Add-Check "node-repl-process" "WARN" "No live node_repl.exe process found"
+}
+else {
+    if ($hasYukinoNodeRepl) {
+        Add-Check "node-repl-process" "PASS" ($details -join " | ")
+    }
+    elseif ($hasOfficialNodeRepl) {
+        Add-Check "node-repl-process" "WARN" "Only official Codex node_repl.exe appears live, not Yukino: $($details -join ' | ')"
+    }
+    else {
+        Add-Check "node-repl-process" "WARN" ($details -join " | ")
+    }
 }
 
 $logDate = Get-Date
@@ -169,8 +483,11 @@ if (Test-Path -LiteralPath $appLogDir) {
     $pluginLines = @()
     $configConflictLines = @()
     $startupErrorLines = @()
+    $browserRuntimeLines = @()
+    $unsupportedWorkspaceDependencyLines = @()
+    $pluginCacheLockLines = @()
     foreach ($file in $logFiles) {
-        $matches = Select-String -LiteralPath $file.FullName -Pattern "pluginsAuthBlockedToast|pluginDeepLinkAuthBlocked|configVersionConflict|Unable to save|errorCode=-32600|uncaughtException|Unhandled|startup|fatal" -ErrorAction SilentlyContinue
+        $matches = Select-String -LiteralPath $file.FullName -Pattern 'pluginsAuthBlockedToast|pluginDeepLinkAuthBlocked|configVersionConflict|Unable to save|errorCode=-32600|uncaughtException|Unhandled|startup|fatal|browser-use native pipe listening|BrowserUseThreadConfig|unsupported feature enablement .*workspace_dependencies|plugin_cache_windows_file_lock' -ErrorAction SilentlyContinue
         foreach ($match in $matches) {
             $line = $match.Line
             $method = Get-LogField $line "method"
@@ -183,6 +500,15 @@ if (Test-Path -LiteralPath $appLogDir) {
             }
             if ($line -match "(?i)uncaughtException|Unhandled|fatal") {
                 $startupErrorLines += "$($file.Name):$($match.LineNumber):$line"
+            }
+            if ($line -like "*browser-use native pipe listening*" -or $line -like "*BrowserUseThreadConfig*") {
+                $browserRuntimeLines += "$($file.Name):$($match.LineNumber):$line"
+            }
+            if ($line -like "*unsupported feature enablement*workspace_dependencies*") {
+                $unsupportedWorkspaceDependencyLines += "$($file.Name):$($match.LineNumber):$line"
+            }
+            if ($line -like "*plugin_cache_windows_file_lock*") {
+                $pluginCacheLockLines += "$($file.Name):$($match.LineNumber):$line"
             }
         }
     }
@@ -206,6 +532,27 @@ if (Test-Path -LiteralPath $appLogDir) {
     }
     else {
         Add-Check "recent-startup-log-errors" "WARN" "$($startupErrorLines.Count) startup marker line(s); first=$($startupErrorLines[0])"
+    }
+
+    if ($browserRuntimeLines.Count -gt 0) {
+        Add-Check "browser-use-runtime-log" "PASS" "$($browserRuntimeLines.Count) Browser runtime marker line(s); latest=$($browserRuntimeLines[0])"
+    }
+    else {
+        Add-Check "browser-use-runtime-log" "WARN" "No 'browser-use native pipe listening' or BrowserUseThreadConfig markers in latest $RecentLogFileCount log file(s)"
+    }
+
+    if ($unsupportedWorkspaceDependencyLines.Count -eq 0) {
+        Add-Check "unsupported-workspace-dependencies-log" "PASS" "No unsupported feature enablement workspace_dependencies lines in latest $RecentLogFileCount log file(s)"
+    }
+    else {
+        Add-Check "unsupported-workspace-dependencies-log" "WARN" "$($unsupportedWorkspaceDependencyLines.Count) unsupported workspace_dependencies line(s); first=$($unsupportedWorkspaceDependencyLines[0])"
+    }
+
+    if ($pluginCacheLockLines.Count -eq 0) {
+        Add-Check "plugin_cache_windows_file_lock" "PASS" "No Chrome plugin cache lock failures in latest $RecentLogFileCount log file(s)"
+    }
+    else {
+        Add-Check "plugin_cache_windows_file_lock" "WARN" "$($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
     }
 }
 else {

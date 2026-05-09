@@ -54,7 +54,7 @@ At the time this note was written, generated data under this workspace was about
 7. In dry-run mode, print the assets without touching GitHub.
 8. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
 9. Record published release metadata under `%USERPROFILE%\.yukino\release-history.jsonl`.
-10. After publishing, run `scripts\Test-YukinoReleaseInstall.ps1 -Tag <tag>` when the user has approved reinstalling Yukino. This downloads the private release assets into a temp directory, verifies `SHA256SUMS.txt`, runs the published installer, runs `verify-yukino.ps1`, and performs a launch smoke.
+10. After publishing, run `scripts\Test-YukinoReleaseInstall.ps1 -Tag <tag>` when the user has approved reinstalling Yukino. This downloads the private release assets into a temp directory, verifies `SHA256SUMS.txt`, runs the published installer, runs `verify-yukino.ps1`, performs a launch smoke, and runs `scripts\Test-YukinoPostInstallBrowserSmoke.ps1`.
 
 Verification runs also append `%USERPROFILE%\.yukino\verify-history.jsonl`.
 
@@ -88,6 +88,7 @@ Runtime and packaging:
 - Keeps native module unpack rules for `node_modules/better-sqlite3` and `node_modules/node-pty`.
 - Replaces both AppX image assets and the PE icon resources embedded in `app\Yukino.exe`.
 - Patches Electron ASAR integrity hash in the renamed executable when Electron reports a mismatch.
+- Preserves the bundled Chrome plugin's public native host name `com.openai.codexextension` so the Chrome Web Store extension can connect to Yukino's `extension-host.exe`.
 
 ## Patch Contracts
 
@@ -117,6 +118,14 @@ Config log warnings:
 - Treat config log conflicts as relevant only when the method is `config/...`, the line mentions `configVersionConflict`, or the line says `Unable to save`.
 - Missing `config/batchWrite` evidence in recent logs is informational after a clean install or launch-only smoke; run a manual settings write when validating the Agent Settings write patch.
 
+Chrome plugin native host:
+
+- The current public Chrome Web Store extension expects native host name `com.openai.codexextension`.
+- Do not rename the bundled Chrome plugin native host to `yukino.akaneextension` unless Yukino ships a separate Chrome extension ID.
+- `build-yukino.ps1` must run `Patch-ChromeNativeHostCompatibility` after loose plugin resource branding so `scripts\extension-id.json` and `scripts\installManifest.mjs` keep `com.openai.codexextension`.
+- `verify-yukino.ps1` and `scripts\Test-YukinoLocalState.ps1` must check the bundled Chrome plugin cache, installed user cache, and `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.openai.codexextension` manifest target.
+- Short-term model: Yukino and official Codex share the public extension/native-host name, with the registry manifest pointing to Yukino's cache. Full isolation requires a Yukino-specific Chrome extension.
+
 ## Latest Verified State
 
 Verification command:
@@ -128,6 +137,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 Latest observed result:
 
 - `latest-build`: PASS, `logs\build-20260509-143956`.
+- `chrome-plugin-build-cache`: PASS after `logs\build-20260509-164031`.
 - `agent-settings-write-patch`: PASS.
 - `settings-local-diagnostics-entry`: PASS, hidden inside Agent Settings maintenance.
 - `plugin-auth-gate`: PASS.
@@ -145,8 +155,13 @@ Latest observed result:
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
+- `config-chrome-plugin`: PASS.
+- `installed-chrome-plugin-cache`: PASS after repairing missing `.codex-plugin` and `assets` under `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\0.1.7`.
+- `chrome-native-host-yukino-target`: PASS, `com.openai.codexextension.json` points to `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\latest\extension-host\windows\x64\extension-host.exe`.
 - `latest-batch-write-log`: PASS when no recent `config/batchWrite` evidence exists; the detail asks for a manual settings write when validating that patch.
 - `recent-config-conflicts`: PASS when recent `-32600` lines are unrelated to `config/...` methods.
+- `plugin_cache_windows_file_lock`: WARN only for the old pre-repair log line until Yukino is restarted and fresh logs confirm it no longer recurs.
+- `post-install-browser-smoke`: PASS; current installed Yukino has a Yukino-path app-server process, Browser runtime pipe log, Yukino `node_repl.exe`, enabled Chrome extension, native host manifest targeting Yukino's cache, and a non-disruptive `about:blank` Chrome dry-run.
 
 Sandbox compatibility note:
 
