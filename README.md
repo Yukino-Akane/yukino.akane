@@ -14,7 +14,7 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 - Publisher: `CN=Yukino`.
 - Latest built package: `out/yukino.akane_26.506.3741.1_x64.msix`.
 - Latest installed package observed: `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`.
-- Stable private release baseline: `v26.506.3741.1-yukino.1`.
+- Stable private release baseline: `v26.506.3741.1-yukino.2`.
 - Config home: `%USERPROFILE%\.yukino`.
 
 ## Files
