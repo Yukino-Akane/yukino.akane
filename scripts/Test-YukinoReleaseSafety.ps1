@@ -95,7 +95,7 @@ try {
         }
     }
 
-    $secretPathspecs = @(".", ":!assets/*.jpg", ":!assets/*.jpeg", ":!assets/*.png")
+    $secretPathspecs = @(".", ":!assets/*.jpg", ":!assets/*.jpeg", ":!assets/*.png", ":!scripts/Test-YukinoReleaseSafety.ps1", ":!tests/Test-YukinoReleaseSafety.ps1")
     $cpaPathspecs = @(".", ":!assets/*.jpg", ":!assets/*.jpeg", ":!assets/*.png", ":!README.md", ":!MOD_NOTES.md", ":!scripts/Test-YukinoReleaseSafety.ps1", ":!tests/Test-YukinoReleaseSafety.ps1")
     Test-GitGrep `
         -Pattern '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN .*PRIVATE KEY-----|OPENAI_API_KEY\s*[:=]|ANTHROPIC_API_KEY\s*[:=]|GH_TOKEN\s*[:=]|GITHUB_TOKEN\s*[:=]|CLOUDFLARE_API_TOKEN\s*[:=]|CF_API_TOKEN\s*[:=])' `
