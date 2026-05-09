@@ -8,19 +8,19 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 
 ## Current State
 
-- Source package: installed `OpenAI.Codex`, latest observed version `26.506.2212.0`.
+- Source package: installed `OpenAI.Codex`, latest observed version `26.506.3741.0`.
 - Target package: `yukino.akane`.
 - Display name: `Yukino`.
 - Publisher: `CN=Yukino`.
-- Latest built package: `out/yukino.akane_26.506.2212.1_x64.msix`.
-- Latest installed package observed: `yukino.akane_26.506.2212.1_x64__fnxqm6pztzbs0`.
+- Latest built package: `out/yukino.akane_26.506.3741.1_x64.msix`.
+- Latest installed package observed: `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`.
 - Config home: `%USERPROFILE%\.yukino`.
 
 ## Files
 
 - `build-yukino.ps1`: copies the installed Codex Desktop package, patches branding and runtime assets, repacks `app.asar`, signs an MSIX, and can install it.
 - `verify-yukino.ps1`: checks the latest build output, installed package, config state, and recent app logs for the expected Yukino patches.
-- `assets/`: source images for Yukino app icons and the desktop sidebar background.
+- `assets/`: source images for Yukino AppX icons, the executable icon, and the desktop sidebar background.
 - `scripts/`: helper scripts used by the rebuild workflow.
 - `tests/`: focused PowerShell checks for source asset generation and injected UI patches.
 - `MOD_NOTES.md`: patch inventory, build flow, verification notes, and known follow-ups.

@@ -218,6 +218,25 @@ function Update-AppxIconAssets([string]$PackageRoot, [string]$SourceImage) {
     }
 }
 
+function Update-ExecutableIcon([string]$ExePath, [string]$IconPath) {
+    if (-not (Test-Path -LiteralPath $ExePath)) {
+        throw "Executable not found for icon patch: $ExePath"
+    }
+    if (-not (Test-Path -LiteralPath $IconPath)) {
+        throw "Executable icon source not found: $IconPath"
+    }
+
+    $patcher = Join-Path $PSScriptRoot "scripts\Set-YukinoExecutableIcon.ps1"
+    if (-not (Test-Path -LiteralPath $patcher)) {
+        throw "Executable icon patcher not found: $patcher"
+    }
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $patcher -ExePath $ExePath -IconPath $IconPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Executable icon patcher failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Patch-UnsupportedExperimentalFeatureSync([string]$AssetsDir) {
     if (-not (Test-Path -LiteralPath $AssetsDir)) {
         return
@@ -271,6 +290,28 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
         }
 
         [IO.File]::WriteAllText($asset.FullName, $text.Replace("s&&!m", "s&&!0"), [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    $pluginDetailRedirectRegex = [regex]::new('if\((?<gate>[A-Za-z_$][A-Za-z0-9_$]*)\((?<auth>[A-Za-z_$][A-Za-z0-9_$]*)\)\)(?<redirect>\{let [A-Za-z_$][A-Za-z0-9_$]*;return [^;]+pluginDeepLinkAuthBlocked:!0[^;]+;)')
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "plugin-detail-page-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains("pluginDeepLinkAuthBlocked") -or -not $text.Contains('to:`/skills`')) {
+            continue
+        }
+
+        $newText = $pluginDetailRedirectRegex.Replace($text, {
+            param($match)
+            $gate = $match.Groups["gate"].Value
+            $auth = $match.Groups["auth"].Value
+            $redirect = $match.Groups["redirect"].Value
+            "if(!1&&${gate}(${auth}))${redirect}"
+        }, 1)
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 
@@ -647,6 +688,7 @@ if (Test-Path -LiteralPath $oldExe) {
 elseif (-not (Test-Path -LiteralPath $newExe)) {
     throw "Cannot find app executable to rename."
 }
+Update-ExecutableIcon -ExePath $newExe -IconPath (Join-Path $src "app\resources\icon.ico")
 
 Write-Step "Extract and patch app.asar"
 $resources = Join-Path $src "app\resources"

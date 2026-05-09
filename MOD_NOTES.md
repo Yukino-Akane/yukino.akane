@@ -83,6 +83,7 @@ Feature and settings patches:
 Runtime and packaging:
 
 - Keeps native module unpack rules for `node_modules/better-sqlite3` and `node_modules/node-pty`.
+- Replaces both AppX image assets and the PE icon resources embedded in `app\Yukino.exe`.
 - Patches Electron ASAR integrity hash in the renamed executable when Electron reports a mismatch.
 
 ## Patch Contracts
@@ -104,22 +105,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260509-005153`.
+- `latest-build`: PASS, `logs\build-20260509-102351`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `sidebar-plugin-route`: PASS.
 - `plugins-settings-entry`: WARN, upstream settings asset pattern changed.
-- `installed-package`: PASS, `yukino.akane_26.506.2212.1_x64__fnxqm6pztzbs0`.
+- `installed-package`: PASS, `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`.
+- `installed-executable-icon`: PASS.
 - `installed-agent-settings-patch`: PASS.
 - `installed-plugin-auth-gate`: PASS.
 - `installed-sidebar-plugin-route`: PASS.
-- `latest-msix`: PASS, `out\yukino.akane_26.506.2212.1_x64.msix`.
+- `installed-sidebar-background-patch`: PASS.
+- `latest-msix`: PASS, `out\yukino.akane_26.506.3741.1_x64.msix`.
 - `config-approval-policy`: PASS, `approval_policy=never`.
 - `config-sandbox-mode`: PASS, `sandbox_mode=danger-full-access`.
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
-- `app-log-dir`: WARN when the newly installed app has not produced a log directory for today yet.
+- `latest-batch-write-log`: WARN when the latest app logs have not recorded a config batch write.
+- `recent-config-conflicts`: WARN for older conflict-related log lines.
 
 Sandbox compatibility note:
 

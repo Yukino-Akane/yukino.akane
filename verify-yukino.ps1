@@ -23,6 +23,10 @@ $sidebarPluginHandlerRouteRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]
 $sidebarPluginHandlerRoutePatchedRegex = 'function\s+(?<handler>[A-Za-z_$][A-Za-z0-9_$]*)\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,\{eventName:`nav_clicked`,metadata:\{item:\k<routeFlag>\?`plugins`:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(\k<routeFlag>\?`/plugins`:`/skills`\)\}.*?onClick:\(\)=>\{\k<handler>\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,\k<routeFlag>\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 $sidebarPluginRouteCurrentRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 $sidebarPluginRouteCurrentPatchedRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
+$pluginDetailRedirectRegex = 'if\([A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
+$pluginDetailRedirectPatchedRegex = 'if\(!1&&[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
+
+Add-Type -AssemblyName System.Drawing
 
 function Add-Check([string]$Name, [string]$Status, [string]$Detail) {
     $checks.Add([pscustomobject]@{
@@ -52,6 +56,69 @@ function Get-FirstFileText([object[]]$Files) {
         return $null
     }
     return [IO.File]::ReadAllText($Files[0].FullName)
+}
+
+function Get-BitmapPixelSha256([System.Drawing.Bitmap]$Bitmap) {
+    $stream = New-Object System.IO.MemoryStream
+    try {
+        $writer = New-Object System.IO.BinaryWriter($stream)
+        try {
+            $writer.Write([int]$Bitmap.Width)
+            $writer.Write([int]$Bitmap.Height)
+            for ($y = 0; $y -lt $Bitmap.Height; $y++) {
+                for ($x = 0; $x -lt $Bitmap.Width; $x++) {
+                    $pixel = $Bitmap.GetPixel($x, $y)
+                    $writer.Write([byte]$pixel.A)
+                    $writer.Write([byte]$pixel.R)
+                    $writer.Write([byte]$pixel.G)
+                    $writer.Write([byte]$pixel.B)
+                }
+            }
+            $writer.Flush()
+        }
+        finally {
+            $writer.Dispose()
+        }
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return [BitConverter]::ToString($sha.ComputeHash($stream.ToArray())).Replace("-", "")
+        }
+        finally {
+            $sha.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-AssociatedIconPixelSha256([string]$Path) {
+    $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($Path)
+    if ($null -eq $icon) {
+        return $null
+    }
+    try {
+        $bitmap = $icon.ToBitmap()
+        try {
+            return Get-BitmapPixelSha256 $bitmap
+        }
+        finally {
+            $bitmap.Dispose()
+        }
+    }
+    finally {
+        $icon.Dispose()
+    }
+}
+
+function Get-PngPixelSha256([string]$Path) {
+    $bitmap = [System.Drawing.Bitmap]::FromFile($Path)
+    try {
+        return Get-BitmapPixelSha256 $bitmap
+    }
+    finally {
+        $bitmap.Dispose()
+    }
 }
 
 Write-Host ""
@@ -115,8 +182,12 @@ if ($latestBuild) {
         $skillsPageHasOldGate = $false
         $skillsPageHasPatchedGate = $false
         $skillsPageHasDisabledPluginPage = $false
+        $skillsPageHasDeepLinkToast = $false
         foreach ($asset in $skillsPageAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("pluginDeepLinkAuthBlocked")) {
+                $skillsPageHasDeepLinkToast = $true
+            }
             if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!m")) {
                 $skillsPageHasOldGate = $true
             }
@@ -125,6 +196,21 @@ if ($latestBuild) {
             }
             if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
                 $skillsPageHasDisabledPluginPage = $true
+            }
+        }
+        $pluginDetailAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "plugin-detail-page-*.js")
+        $pluginDetailHasOldRedirect = $false
+        $pluginDetailHasPatchedRedirect = $false
+        foreach ($asset in $pluginDetailAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if (-not $text.Contains("pluginDeepLinkAuthBlocked")) {
+                continue
+            }
+            if ([regex]::IsMatch($text, $pluginDetailRedirectRegex)) {
+                $pluginDetailHasOldRedirect = $true
+            }
+            if ([regex]::IsMatch($text, $pluginDetailRedirectPatchedRegex)) {
+                $pluginDetailHasPatchedRedirect = $true
             }
         }
 
@@ -149,14 +235,14 @@ if ($latestBuild) {
             }
         }
 
-        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedGate -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
+        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedGate -and (-not $pluginDetailHasOldRedirect) -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
             Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page and sidebar assets"
         }
-        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and (-not $sidebarHasOldGate)) {
-            Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient or sidebar assets"
+        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and (-not $pluginDetailHasOldRedirect) -and ($pluginDetailHasPatchedRedirect -or -not $skillsPageHasDeepLinkToast) -and (-not $sidebarHasOldGate)) {
+            Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient, plugin detail, or sidebar assets"
         }
         else {
-            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, skills-page disabled plugin page=$skillsPageHasDisabledPluginPage, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
+            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, skills-page disabled plugin page=$skillsPageHasDisabledPluginPage, plugin detail old redirect=$pluginDetailHasOldRedirect, plugin detail patched redirect=$pluginDetailHasPatchedRedirect, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
         }
 
         $sidebarHasOldPluginRoute = $false
@@ -264,6 +350,25 @@ $installed = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if ($installed) {
     Add-Check "installed-package" "PASS" "$($installed.PackageFullName) at $($installed.InstallLocation)"
+    $installedExe = Join-Path $installed.InstallLocation "app\Yukino.exe"
+    $installedExeIconReference = Join-Path $installed.InstallLocation "Assets\Square44x44Logo.targetsize-32_altform-unplated.png"
+    if (-not (Test-Path -LiteralPath $installedExe)) {
+        Add-Check "installed-executable-icon" "FAIL" "Missing installed executable: $installedExe"
+    }
+    elseif (-not (Test-Path -LiteralPath $installedExeIconReference)) {
+        Add-Check "installed-executable-icon" "FAIL" "Missing installed executable icon reference: $installedExeIconReference"
+    }
+    else {
+        $expectedExeIconHash = Get-PngPixelSha256 $installedExeIconReference
+        $actualExeIconHash = Get-AssociatedIconPixelSha256 $installedExe
+        if ($actualExeIconHash -eq $expectedExeIconHash) {
+            Add-Check "installed-executable-icon" "PASS" "Yukino.exe associated icon matches Yukino asset"
+        }
+        else {
+            Add-Check "installed-executable-icon" "FAIL" "Yukino.exe associated icon does not match the generated Yukino icon; rebuild and reinstall the MSIX"
+        }
+    }
+
     $installedAsar = Join-Path $installed.InstallLocation "app\resources\app.asar"
     if (Test-Path -LiteralPath $installedAsar) {
         if (Get-Command rg -ErrorAction SilentlyContinue) {
@@ -299,11 +404,23 @@ if ($installed) {
             $installedHasPatchedSkillsPageGate = $LASTEXITCODE -eq 0
             & rg -a --fixed-strings --quiet -- "s&&!1" $installedAsar
             $installedHasDisabledSkillsPageGate = $LASTEXITCODE -eq 0
-            if ($installedHasSkillsPageAuthToast -and (-not $installedHasPatchedSkillsPageGate)) {
+            & rg -a --fixed-strings --quiet -- "pluginDeepLinkAuthBlocked" $installedAsar
+            $installedHasPluginDetailDeepLinkGate = $LASTEXITCODE -eq 0
+            & rg -a --pcre2 --quiet -- $pluginDetailRedirectRegex $installedAsar
+            $installedHasPluginDetailRedirect = $LASTEXITCODE -eq 0
+            & rg -a --pcre2 --quiet -- $pluginDetailRedirectPatchedRegex $installedAsar
+            $installedHasPatchedPluginDetailRedirect = $LASTEXITCODE -eq 0
+            if ($installedHasSkillsPageAuthToast -and $installedHasDisabledSkillsPageGate) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle disables the Plugins page entry with s&&!1; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedHasPluginDetailRedirect) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed plugin detail bundle still redirects API-key users back to Skills; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedHasSkillsPageAuthToast -and (-not $installedHasPatchedSkillsPageGate) -and (-not $installedHasPatchedPluginDetailRedirect)) {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle does not contain the expected s&&!0 Plugins page entry patch"
             }
-            elseif ($installedHasSkillsPageAuthToast -and $installedHasDisabledSkillsPageGate) {
-                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle disables the Plugins page entry with s&&!1; rebuild and reinstall the MSIX"
+            elseif ($installedHasPluginDetailDeepLinkGate -and -not $installedHasPatchedPluginDetailRedirect) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed plugin detail bundle does not contain the expected patched deep-link redirect gate"
             }
             elseif ($installedHasPatchedSidebarPluginGate -and -not $installedHasSidebarPluginGate) {
                 Add-Check "installed-plugin-auth-gate" "PASS" $installedAsar

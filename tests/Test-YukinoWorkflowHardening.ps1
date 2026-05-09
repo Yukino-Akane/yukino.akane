@@ -36,6 +36,7 @@ foreach ($testName in @(
     "Test-YukinoPluginAuthGatePatch.ps1",
     "Test-YukinoSidebarBackground.ps1",
     "Test-YukinoIconAssets.ps1",
+    "Test-YukinoExecutableIconPatch.ps1",
     "Test-YukinoWorkflowHardening.ps1",
     "Test-YukinoBuildAudit.ps1",
     "Test-YukinoControlHome.ps1"
