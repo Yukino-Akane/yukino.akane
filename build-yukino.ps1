@@ -192,6 +192,25 @@ function Patch-ChromeNativeHostCompatibility([string]$ResourcesRoot) {
     return $patched
 }
 
+function Copy-YukinoDiagnosticScripts([string]$ResourcesRoot) {
+    $targetRoot = Join-Path $ResourcesRoot "scripts"
+    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+
+    $scriptNames = @(
+        "Test-YukinoLocalState.ps1",
+        "Repair-YukinoChromePluginCache.ps1"
+    )
+    foreach ($scriptName in $scriptNames) {
+        $source = Join-Path $PSScriptRoot "scripts\$scriptName"
+        if (-not (Test-Path -LiteralPath $source)) {
+            throw "Missing Yukino diagnostic script: $source"
+        }
+        Copy-Item -LiteralPath $source -Destination (Join-Path $targetRoot $scriptName) -Force
+    }
+
+    Write-Host "Bundled Yukino diagnostic scripts in app resources"
+}
+
 function Patch-UpdaterIsolation([string]$BootstrapPath) {
     $text = [IO.File]::ReadAllText($BootstrapPath)
     $marker = "Yukino updater disabled"
@@ -534,13 +553,26 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
     $versionLabelMarker = 'settings.agent.dependencies.yukinoVersion.label'
     $commandMarker = 'npm run diagnose'
     $scriptMarker = 'scripts/Test-YukinoLocalState.ps1'
+    $runnerMarker = 'run-yukino-local-diagnostics'
+    $requestedMarker = 'yukino-diagnostics-requested'
+    $buttonMarker = 'Run diagnostics'
     $versionSummary = 'Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino'
     $oldChildren = 'children:[we,Ne,J,$]'
+    $mutationAnchor = 'let D=g(`diagnose-primary-runtime-dependencies`,E),O=v(`diagnose-primary-runtime-dependencies`),k=v(`primary-runtime-update-run-now`),A=v(`reset-primary-runtime-dependencies`),j;'
+    $mutationPatch = 'let D=g(`diagnose-primary-runtime-dependencies`,E),O=v(`diagnose-primary-runtime-dependencies`),k=v(`primary-runtime-update-run-now`),A=v(`reset-primary-runtime-dependencies`),Ye=v(`run-yukino-local-diagnostics`),j;'
+    $pendingAnchor = 'se=l||p.isPending||O.isPending||k.isPending||A.isPending||M.isPending'
+    $pendingPatch = 'se=l||p.isPending||O.isPending||k.isPending||A.isPending||Ye.isPending||M.isPending'
+    $cacheSizeAnchor = 'function Ge(e){let t=(0,Me.c)(85)'
+    $cacheSizePatch = 'function Ge(e){let t=(0,Me.c)(87)'
+    $returnCacheAnchor = 'return t[80]!==we||t[81]!==Ne||t[82]!==J||t[83]!==$?'
+    $returnCachePatch = 'return t[80]!==we||t[81]!==Ne||t[82]!==J||t[83]!==$||t[84]!==Ye.isPending||t[85]!==r?'
+    $returnCacheStoreAnchor = 't[80]=we,t[81]=Ne,t[82]=J,t[83]=$,t[84]=Be):Be=t[84],Be}'
+    $returnCacheStorePatch = 't[80]=we,t[81]=Ne,t[82]=J,t[83]=$,t[84]=Ye.isPending,t[85]=r,t[86]=Be):Be=t[86],Be}'
     $versionRow = @'
 (0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.label`,defaultMessage:`Yukino version`,description:`Label for Yukino version information in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.description`,defaultMessage:`Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino`,description:`Description for Yukino version information in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,onClick:()=>{let e=navigator.clipboard?.writeText?.(`Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino`);e?e.then(()=>{P.success(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copied`,defaultMessage:`Yukino version copied`,description:`Toast shown after copying Yukino version information`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copyFailed`,defaultMessage:`Copy failed. Yukino package: yukino.akane; release: v26.506.3741.1-yukino.2; config: %USERPROFILE%\\.yukino`,description:`Toast shown when copying Yukino version information fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copyUnavailable`,defaultMessage:`Yukino package: yukino.akane; release: v26.506.3741.1-yukino.2; config: %USERPROFILE%\\.yukino`,description:`Toast shown when clipboard copy is unavailable for Yukino version information`}))},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.button`,defaultMessage:`Copy info`,description:`Button label for copying Yukino version information`})]})})
 '@
     $localDiagnosticsRow = @'
-(0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.label`,defaultMessage:`Yukino local diagnostics`,description:`Label for Yukino local diagnostics in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.description`,defaultMessage:`Copies the maintenance command for the read-only local report: npm run diagnose (scripts/Test-YukinoLocalState.ps1)`,description:`Description for Yukino local diagnostics in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,onClick:()=>{let e=navigator.clipboard?.writeText?.(`npm run diagnose`);e?e.then(()=>{P.success(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copied`,defaultMessage:`Yukino local diagnostic command copied`,description:`Toast shown after copying the local diagnostics command`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyFailed`,defaultMessage:`Copy failed. Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when copying the local diagnostics command fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyUnavailable`,defaultMessage:`Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when clipboard copy is unavailable`}))},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.button`,defaultMessage:`Copy command`,description:`Button label for copying the Yukino local diagnostics command`})]})})
+(0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.label`,defaultMessage:`Yukino local diagnostics`,description:`Label for Yukino local diagnostics in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.description`,defaultMessage:`Runs the bundled read-only diagnostic and copies the result. Fallback: npm run diagnose (scripts/Test-YukinoLocalState.ps1 -NoRepair)`,description:`Description for Yukino local diagnostics in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,loading:Ye.isPending,disabled:Ye.isPending,onClick:()=>{s(`yukino-diagnostics-requested`,{source:`settings`});Ye.mutateAsync({hostId:r}).then(e=>{let t=[`Yukino local diagnostics`,e.summary??``,e.stdout??``,e.stderr??``].filter(Boolean).join(`\n\n`),n=navigator.clipboard?.writeText?.(t);n?n.then(()=>{e.success?P.success(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copied`,defaultMessage:`Yukino local diagnostics copied`,description:`Toast shown after running and copying the local diagnostics result`})):P.warning(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.problem`,defaultMessage:`Yukino local diagnostics found issues and copied the report`,description:`Toast shown after local diagnostics find issues`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyFailed`,defaultMessage:`Diagnostics ran, but copying the report failed. Fallback: npm run diagnose`,description:`Toast shown when copying the local diagnostics result fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyUnavailable`,defaultMessage:`Diagnostics ran, but clipboard is unavailable. Fallback: npm run diagnose`,description:`Toast shown when clipboard is unavailable after local diagnostics runs`}))}).catch(()=>{P.danger(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.failed`,defaultMessage:`Couldn’t run Yukino local diagnostics`,description:`Toast shown when local diagnostics cannot run`}))})},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.button`,defaultMessage:`Run diagnostics`,description:`Button label for running the Yukino local diagnostics command`})]})})
 '@
     $newChildren = 'children:[we,Ne,J,' + $versionRow + ',' + $localDiagnosticsRow + ',$]'
 
@@ -551,10 +583,10 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
             throw "Existing Yukino version Settings entry is present without the local diagnostics entry in $($asset.FullName)."
         }
         if ($text.Contains($labelMarker)) {
-            if ($text.Contains($commandMarker) -and $text.Contains($scriptMarker) -and $text.Contains($versionLabelMarker) -and $text.Contains($versionSummary)) {
+            if ($text.Contains($commandMarker) -and $text.Contains($scriptMarker) -and $text.Contains($versionLabelMarker) -and $text.Contains($versionSummary) -and $text.Contains($runnerMarker) -and $text.Contains($requestedMarker) -and $text.Contains($buttonMarker) -and $text.Contains("-NoRepair")) {
                 continue
             }
-            throw "Existing Yukino local diagnostics Settings entry is missing expected command or version markers in $($asset.FullName)."
+            throw "Existing Yukino local diagnostics Settings entry is missing expected runner, command, or version markers in $($asset.FullName)."
         }
         if (-not $text.Contains("settings.agent.dependencies.sectionTitle") -or -not $text.Contains("diagnose-primary-runtime-dependencies")) {
             continue
@@ -562,8 +594,16 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
         if (-not $text.Contains($oldChildren)) {
             continue
         }
+        if (-not $text.Contains($mutationAnchor)) {
+            throw "Cannot find Agent Settings dependency mutation list for the Yukino local diagnostics runner in $($asset.FullName)."
+        }
+        foreach ($cacheAnchor in @($cacheSizeAnchor, $returnCacheAnchor, $returnCacheStoreAnchor)) {
+            if (-not $text.Contains($cacheAnchor)) {
+                throw "Cannot find Agent Settings dependency cache anchor for the Yukino local diagnostics runner in $($asset.FullName)."
+            }
+        }
 
-        $newText = $text.Replace($oldChildren, $newChildren)
+        $newText = $text.Replace($cacheSizeAnchor, $cacheSizePatch).Replace($mutationAnchor, $mutationPatch).Replace($pendingAnchor, $pendingPatch).Replace($returnCacheAnchor, $returnCachePatch).Replace($returnCacheStoreAnchor, $returnCacheStorePatch).Replace($oldChildren, $newChildren)
         if ($newText -eq $text) {
             continue
         }
@@ -577,6 +617,55 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
     }
 
     Write-Host "Patched Yukino local diagnostics and version Settings entries in $patched webview asset file(s)"
+}
+
+function Patch-YukinoLocalDiagnosticsRunner([string]$BuildDir) {
+    if (-not (Test-Path -LiteralPath $BuildDir)) {
+        return
+    }
+
+    $methodMarker = '"run-yukino-local-diagnostics"'
+    $anchor = '"diagnose-primary-runtime-dependencies":async({hostId:e})=>{Xx(e);let t=await Jx({hostId:e});return{bundleVersion:t.bundleVersion,installed:t.installed,problems:t.problems}},'
+    $handler = @'
+"run-yukino-local-diagnostics":async({hostId:e})=>{Xx(e);let n=i.default.join(process.resourcesPath??i.default.join(__dirname,`..`,`..`),`scripts`,`Test-YukinoLocalState.ps1`);if(!o.default.existsSync(n))return{success:!1,exitCode:null,stdout:``,stderr:`Missing bundled Yukino diagnostic script: ${n}`,summary:`Missing bundled Yukino diagnostic script`};try{let e=await zt(`powershell`,[`-NoProfile`,`-ExecutionPolicy`,`Bypass`,`-File`,n,`-NoRepair`],{cwd:i.default.dirname(n),env:t.Ur(process.env),encoding:`utf8`,maxBuffer:1024*1024,timeout:12e4,windowsHide:!0});return{success:!0,exitCode:0,stdout:e.stdout??``,stderr:e.stderr??``,summary:`Yukino local diagnostics passed`}}catch(e){let t=typeof e.code===`number`?e.code:null;return{success:!1,exitCode:t,stdout:e.stdout??``,stderr:e.stderr??e.message??``,summary:`Yukino local diagnostics failed`}}},
+'@
+
+    $patched = 0
+    foreach ($asset in Get-ChildItem -LiteralPath $BuildDir -File -Filter "main-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (-not $text.Contains($anchor)) {
+            continue
+        }
+        if ($text.Contains($methodMarker)) {
+            if ($text.Contains("Test-YukinoLocalState.ps1") -and $text.Contains("-NoRepair") -and $text.Contains("maxBuffer")) {
+                continue
+            }
+            throw "Existing Yukino local diagnostics runner is missing expected markers in $($asset.FullName)."
+        }
+
+        $newText = $text.Replace($anchor, $anchor + $handler)
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -eq 0) {
+        $alreadyPatched = Get-ChildItem -LiteralPath $BuildDir -File -Filter "main-*.js" |
+            Where-Object {
+                $text = [IO.File]::ReadAllText($_.FullName)
+                $text.Contains($methodMarker) -and $text.Contains("Test-YukinoLocalState.ps1") -and $text.Contains("-NoRepair") -and $text.Contains("maxBuffer")
+            } |
+            Select-Object -First 1
+        if (-not $alreadyPatched) {
+            throw "Cannot find app-server primary runtime diagnostics handler for the Yukino local diagnostics runner."
+        }
+    }
+    else {
+        Write-Host "Patched Yukino local diagnostics app-server runner in $patched build file(s)"
+    }
 }
 
 function Patch-WebviewSidebarBackground([string]$ExtractDir, [string]$SourceImage) {
@@ -702,6 +791,7 @@ function Patch-BuildJs([string]$ExtractDir, [string]$SidebarBackgroundSource) {
     Patch-PluginSidebarRoute -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-AgentSettingsConfigWrites -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-YukinoSettingsDiagnosticsEntry -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-YukinoLocalDiagnosticsRunner -BuildDir $buildDir
     Patch-WebviewSidebarBackground -ExtractDir $ExtractDir -SourceImage $SidebarBackgroundSource
 
     foreach ($relative in @("native-menu-locales", "skills", "webview")) {
@@ -811,6 +901,7 @@ Update-ExecutableIcon -ExePath $newExe -IconPath (Join-Path $src "app\resources\
 
 Write-Step "Extract and patch app.asar"
 $resources = Join-Path $src "app\resources"
+Copy-YukinoDiagnosticScripts -ResourcesRoot $resources
 $asarPath = Join-Path $resources "app.asar"
 $extractDir = Join-Path $work "app-extracted"
 New-Item -ItemType Directory -Path $extractDir -Force | Out-Null

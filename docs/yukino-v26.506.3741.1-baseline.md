@@ -24,6 +24,7 @@ The release assets remain valid. Later maintenance commits through `0c9231c` imp
 - Added a real release install smoke script: `scripts\Test-YukinoReleaseInstall.ps1`.
 - Added a read-only local diagnostic script: `scripts\Test-YukinoLocalState.ps1`.
 - Added a quiet in-app Yukino version row in Agent Settings > Workspace Dependencies, showing the package identity, stable release baseline, and `.yukino` config home.
+- Added the follow-up one-click local diagnostics path for the next package: Agent Settings > Workspace Dependencies now calls the fixed `run-yukino-local-diagnostics` app-server method, runs the bundled `scripts\Test-YukinoLocalState.ps1 -NoRepair`, and copies the bounded report.
 - Added strict post-install Browser smoke evidence for manual GUI checks: `scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -RequireBrowserRuntimeActivity` now requires matched Browser turn start/end log lines with the same `turnId`.
 - Recovered locked Chrome plugin cache updates by retargeting a complete recovery cache and deferring locked stale-path cleanup.
 - Cleaned verification noise so `verify-yukino.ps1` reports real risks instead of upstream-shape or unrelated-log false warnings.
@@ -78,7 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoRelease
 ### Product Clarity
 
 - Keep the in-app Yukino version surface quiet inside Settings rather than adding a standalone About page until a broader product settings pass is needed.
-- Keep local diagnostics tucked into Settings rather than adding a visible diagnostics page. The first UI step is the Agent Settings > Workspace Dependencies row that copies `npm run diagnose`; a future one-click runner should wait until the main-process IPC path is verified.
+- Keep local diagnostics tucked into Settings rather than adding a visible diagnostics page. The one-click runner must stay fixed to the bundled read-only script and keep `npm run diagnose` only as a fallback hint.
 - Make plugin and skill status easier to inspect from the UI before changing deeper runtime behavior.
 
 ### Update Discipline

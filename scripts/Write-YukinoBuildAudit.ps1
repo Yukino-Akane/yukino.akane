@@ -56,6 +56,7 @@ $expectedAddedPatterns = @(
     "app/$DisplayName.exe",
     "Assets/*",
     "app/resources/icon.ico",
+    "app/resources/scripts/*",
     "app/resources/app.asar.unpacked/*"
 )
 $expectedChangedPatterns = @(

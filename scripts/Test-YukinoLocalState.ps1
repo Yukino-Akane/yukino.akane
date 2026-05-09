@@ -5,7 +5,8 @@ param(
     [string]$ConfigPath = "$env:USERPROFILE\.yukino\config.toml",
     [string]$Repo = "Yukino-Akane/yukino.akane",
     [string]$ReleaseTag = "",
-    [int]$RecentLogFileCount = 8
+    [int]$RecentLogFileCount = 8,
+    [switch]$NoRepair
 )
 
 $ErrorActionPreference = "Stop"
@@ -257,7 +258,7 @@ function Add-InstalledChromePluginCacheCheck([string]$PluginRoot) {
     }
 
     $repairScript = Join-Path $ProjectRoot "scripts\Repair-YukinoChromePluginCache.ps1"
-    if (Test-Path -LiteralPath $repairScript) {
+    if (-not $NoRepair -and (Test-Path -LiteralPath $repairScript)) {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $repairScript | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $repairedResult = Test-ChromePluginCache -PluginRoot $PluginRoot

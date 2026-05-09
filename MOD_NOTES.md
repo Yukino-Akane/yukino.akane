@@ -80,7 +80,7 @@ Feature and settings patches:
 - Patches the combined sidebar Plugins/Skills click route so the desktop `Plugins` label opens `/plugins` with `initialMode=browse` and `initialTab=plugins`, avoiding the shared page's default Skills tab.
 - Enables the desktop plugins settings entry in `settings-page-*.js`.
 - Rewrites Agent Settings config writes from `write-config-value` to `batch-write-config-value` with reload enabled.
-- Adds quiet Yukino version and local diagnostics rows inside Agent Settings > Workspace Dependencies. The version row copies the Yukino package/release/config-home identity, and the diagnostics row copies `npm run diagnose` / `scripts\Test-YukinoLocalState.ps1` instead of adding a standalone diagnostics page or unverified one-click PowerShell runner.
+- Adds quiet Yukino version and local diagnostics rows inside Agent Settings > Workspace Dependencies. The version row copies the Yukino package/release/config-home identity, and the diagnostics row runs the bundled read-only `scripts\Test-YukinoLocalState.ps1 -NoRepair` through the fixed `run-yukino-local-diagnostics` app-server method, then copies the bounded report. It keeps `npm run diagnose` as a fallback hint and does not add a standalone diagnostics page or arbitrary UI-provided command runner.
 - Supports the current `app-main-*.css` bundle for the Yukino sidebar background patch.
 
 Runtime and packaging:

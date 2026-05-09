@@ -36,6 +36,8 @@ Assert-True $scriptText.Contains("git status --short --branch") "Local state dia
 Assert-True $scriptText.Contains("gh release view") "Local state diagnostic should compare against a GitHub release when gh is available."
 Assert-True $scriptText.Contains("installed-release-version") "Local state diagnostic should compare the installed package version with the release MSIX asset version."
 Assert-True $scriptText.Contains("PackageFullName") "Local state diagnostic should include installed package identity in details."
+Assert-True $scriptText.Contains("[switch]`$NoRepair") "Local state diagnostic should expose a no-repair mode for the in-app one-click runner."
+Assert-True $scriptText.Contains("-not `$NoRepair") "Local state diagnostic should skip cache repair when no-repair mode is set."
 
 $testRunnerText = [IO.File]::ReadAllText($testRunner)
 Assert-True $testRunnerText.Contains("Test-YukinoLocalState.ps1") "The test suite should include the local state diagnostic contract test."

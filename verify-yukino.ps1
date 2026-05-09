@@ -33,6 +33,9 @@ $settingsPageSectionMapRegex = '\{[^{}]*"plugins-settings":[A-Za-z_$][A-Za-z0-9_
 $settingsLocalDiagnosticsLabel = 'settings.agent.dependencies.localDiagnostics.label'
 $settingsLocalDiagnosticsCommand = 'npm run diagnose'
 $settingsLocalDiagnosticsScript = 'scripts/Test-YukinoLocalState.ps1'
+$settingsLocalDiagnosticsRunner = 'run-yukino-local-diagnostics'
+$settingsLocalDiagnosticsRequested = 'yukino-diagnostics-requested'
+$settingsLocalDiagnosticsButton = 'Run diagnostics'
 $settingsYukinoVersionLabel = 'settings.agent.dependencies.yukinoVersion.label'
 $settingsYukinoVersionRelease = 'v26.506.3741.1-yukino.2'
 $settingsYukinoVersionPackage = 'yukino.akane'
@@ -78,6 +81,76 @@ function Get-FirstFileText([object[]]$Files) {
         return $null
     }
     return [IO.File]::ReadAllText($Files[0].FullName)
+}
+
+function Test-BundledLocalDiagnosticScripts([string]$ScriptsRoot) {
+    $missing = @()
+    foreach ($scriptName in @("Test-YukinoLocalState.ps1", "Repair-YukinoChromePluginCache.ps1")) {
+        $path = Join-Path $ScriptsRoot $scriptName
+        if (-not (Test-Path -LiteralPath $path)) {
+            $missing += $scriptName
+        }
+    }
+
+    if ($missing.Count -gt 0) {
+        return [pscustomobject]@{
+            Complete = $false
+            Detail = "Missing bundled diagnostic script(s) under ${ScriptsRoot}: $($missing -join ', ')"
+        }
+    }
+
+    $localStateScript = Join-Path $ScriptsRoot "Test-YukinoLocalState.ps1"
+    $scriptText = [IO.File]::ReadAllText($localStateScript)
+    if (-not ($scriptText.Contains("[switch]`$NoRepair") -and $scriptText.Contains("-not `$NoRepair"))) {
+        return [pscustomobject]@{
+            Complete = $false
+            Detail = "Bundled Test-YukinoLocalState.ps1 is missing the read-only -NoRepair contract"
+        }
+    }
+
+    return [pscustomobject]@{
+        Complete = $true
+        Detail = $ScriptsRoot
+    }
+}
+
+function Test-YukinoLocalDiagnosticsRunner([string]$BuildDir) {
+    if (-not (Test-Path -LiteralPath $BuildDir)) {
+        return [pscustomobject]@{
+            Complete = $false
+            Detail = "Missing build dir: $BuildDir"
+        }
+    }
+
+    $mainAssets = @(Get-ChildItem -LiteralPath $BuildDir -File -Filter "main-*.js" -ErrorAction SilentlyContinue)
+    if ($mainAssets.Count -eq 0) {
+        return [pscustomobject]@{
+            Complete = $false
+            Detail = "No main-*.js asset found in $BuildDir"
+        }
+    }
+
+    foreach ($asset in $mainAssets) {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if (
+            $text.Contains($settingsLocalDiagnosticsRunner) -and
+            $text.Contains("Test-YukinoLocalState.ps1") -and
+            $text.Contains("-NoRepair") -and
+            $text.Contains("powershell") -and
+            $text.Contains("maxBuffer") -and
+            $text.Contains("process.resourcesPath")
+        ) {
+            return [pscustomobject]@{
+                Complete = $true
+                Detail = $asset.FullName
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Complete = $false
+        Detail = "Missing fixed Yukino local diagnostics app-server runner in $BuildDir"
+    }
 }
 
 function Test-ChromePluginCache([string]$PluginRoot) {
@@ -442,6 +515,29 @@ if ($latestBuild) {
     }
     Add-ChromePluginCacheCheck "chrome-plugin-build-cache" $latestBuildChromePluginRoot
 
+    $bundledScriptsRoot = if ($verifyUnpackRoot) {
+        Join-Path $verifyUnpackRoot.FullName "app\resources\scripts"
+    }
+    else {
+        Join-Path $ProjectRoot "src_unpacked\app\resources\scripts"
+    }
+    $bundledScriptStatus = Test-BundledLocalDiagnosticScripts -ScriptsRoot $bundledScriptsRoot
+    if ($bundledScriptStatus.Complete) {
+        Add-Check "bundled-local-diagnostics-script" "PASS" $bundledScriptStatus.Detail
+    }
+    else {
+        Add-Check "bundled-local-diagnostics-script" "FAIL" $bundledScriptStatus.Detail
+    }
+
+    $latestBuildMainDir = Join-Path $latestBuild.FullName "app-extracted\.vite\build"
+    $runnerStatus = Test-YukinoLocalDiagnosticsRunner -BuildDir $latestBuildMainDir
+    if ($runnerStatus.Complete) {
+        Add-Check "yukino-local-diagnostics-runner" "PASS" $runnerStatus.Detail
+    }
+    else {
+        Add-Check "yukino-local-diagnostics-runner" "FAIL" $runnerStatus.Detail
+    }
+
     $assetsDir = Join-Path $latestBuild.FullName "app-extracted\webview\assets"
     if (Test-Path -LiteralPath $assetsDir) {
         $agentAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "agent-settings-*.js")
@@ -472,6 +568,10 @@ if ($latestBuild) {
                 $text.Contains($settingsLocalDiagnosticsLabel) -and
                 $text.Contains($settingsLocalDiagnosticsCommand) -and
                 $text.Contains($settingsLocalDiagnosticsScript) -and
+                $text.Contains($settingsLocalDiagnosticsRunner) -and
+                $text.Contains($settingsLocalDiagnosticsRequested) -and
+                $text.Contains($settingsLocalDiagnosticsButton) -and
+                $text.Contains("-NoRepair") -and
                 $text.Contains("navigator.clipboard")
             ) {
                 $agentHasLocalDiagnosticsEntry = $true

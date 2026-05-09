@@ -55,6 +55,7 @@ try {
     Write-Utf8File (Join-Path $outputRoot "app\Yukino.exe") "official exe"
     Write-Utf8File (Join-Path $outputRoot "app\resources\app.asar") "patched asar"
     Write-Utf8File (Join-Path $outputRoot "app\resources\plugins\plugin.json") "{`"name`":`"Yukino plugin`"}"
+    Write-Utf8File (Join-Path $outputRoot "app\resources\scripts\Test-YukinoLocalState.ps1") "diagnostic script"
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $auditScript `
         -SourceManifestPath $manifestPath `
@@ -68,6 +69,7 @@ try {
     Assert-True (($audit.expectedChanged -contains "AppxManifest.xml") -and ($audit.expectedChanged -contains "app/resources/app.asar")) "Build audit should record expected changed files."
     Assert-True ($audit.expectedChanged -contains "app/resources/plugins/plugin.json") "Build audit should allow branded loose plugin resources."
     Assert-True ($audit.expectedAdded -contains "app/Yukino.exe") "Build audit should record the renamed Yukino executable."
+    Assert-True ($audit.expectedAdded -contains "app/resources/scripts/Test-YukinoLocalState.ps1") "Build audit should allow bundled Yukino diagnostic scripts."
     Assert-True ($audit.expectedRemoved -contains "app/Codex.exe") "Build audit should record removed Codex executable."
 
     Write-Utf8File (Join-Path $outputRoot "AppxSignature.p7x") "stale signature"
