@@ -46,6 +46,89 @@ function Get-LogField([string]$Line, [string]$Name) {
     return ""
 }
 
+function Get-LogLineTimestamp([string]$Line) {
+    $match = [regex]::Match($Line, "^(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s+")
+    if (-not $match.Success) {
+        return $null
+    }
+
+    try {
+        return [datetimeoffset]::Parse(
+            $match.Groups["timestamp"].Value,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind
+        )
+    }
+    catch {
+        return $null
+    }
+}
+
+function Find-BrowserRuntimeActivityLog([object[]]$Files) {
+    $startsByTurn = @{}
+    $endsByTurn = @{}
+
+    foreach ($file in $Files) {
+        $matches = @(Select-String -LiteralPath $file.FullName -Pattern "IAB_LIFECYCLE (captured turn route|ended browser use turn route)" -CaseSensitive:$false -ErrorAction SilentlyContinue)
+        foreach ($match in $matches) {
+            $turnId = Get-LogField -Line $match.Line -Name "turnId"
+            if (-not $turnId) {
+                continue
+            }
+
+            $timestamp = Get-LogLineTimestamp -Line $match.Line
+            if ($null -eq $timestamp) {
+                continue
+            }
+
+            $entry = [pscustomobject]@{
+                TurnId = $turnId
+                Timestamp = $timestamp
+                Detail = "$($file.Name):$($match.LineNumber):$($match.Line)"
+            }
+
+            if ($match.Line -like "*captured turn route*") {
+                $startsByTurn[$turnId] = $entry
+            }
+            elseif ($match.Line -like "*ended browser use turn route*") {
+                $endsByTurn[$turnId] = $entry
+            }
+        }
+    }
+
+    $candidates = @()
+    foreach ($turnId in $startsByTurn.Keys) {
+        if (-not $endsByTurn.ContainsKey($turnId)) {
+            continue
+        }
+
+        $start = $startsByTurn[$turnId]
+        $end = $endsByTurn[$turnId]
+        if ($end.Timestamp -ge $start.Timestamp) {
+            $candidates += [pscustomobject]@{
+                TurnId = $turnId
+                Timestamp = $end.Timestamp
+                Detail = "turnId=$turnId; turnStart=$($start.Detail); turnEnd=$($end.Detail)"
+            }
+        }
+    }
+
+    $latest = @($candidates | Sort-Object Timestamp -Descending | Select-Object -First 1)
+    if ($latest.Count -gt 0) {
+        return [pscustomobject]@{
+            Found = $true
+            TurnId = $latest[0].TurnId
+            Detail = $latest[0].Detail
+        }
+    }
+
+    return [pscustomobject]@{
+        Found = $false
+        TurnId = ""
+        Detail = ""
+    }
+}
+
 function Test-ChromePluginCache([string]$PluginRoot) {
     $result = [pscustomobject]@{
         Exists = (Test-Path -LiteralPath $PluginRoot)
@@ -520,7 +603,7 @@ if (Test-Path -LiteralPath $appLogDir) {
     $unsupportedWorkspaceDependencyLines = @()
     $pluginCacheLockLines = @()
     foreach ($file in $logFiles) {
-        $matches = Select-String -LiteralPath $file.FullName -Pattern 'pluginsAuthBlockedToast|pluginDeepLinkAuthBlocked|configVersionConflict|Unable to save|errorCode=-32600|uncaughtException|Unhandled|startup|fatal|browser-use native pipe listening|BrowserUseThreadConfig|unsupported feature enablement .*workspace_dependencies|plugin_cache_windows_file_lock' -ErrorAction SilentlyContinue
+        $matches = Select-String -LiteralPath $file.FullName -Pattern 'pluginsAuthBlockedToast|pluginDeepLinkAuthBlocked|configVersionConflict|Unable to save|errorCode=-32600|uncaughtException|Unhandled|startup|fatal|browser-use native pipe listening|BrowserUseThreadConfig|IAB_LIFECYCLE (captured turn route|ended browser use turn route)|unsupported feature enablement .*workspace_dependencies|plugin_cache_windows_file_lock' -ErrorAction SilentlyContinue
         foreach ($match in $matches) {
             $line = $match.Line
             $method = Get-LogField $line "method"
@@ -572,6 +655,14 @@ if (Test-Path -LiteralPath $appLogDir) {
     }
     else {
         Add-Check "browser-use-runtime-log" "WARN" "No 'browser-use native pipe listening' or BrowserUseThreadConfig markers in latest $RecentLogFileCount log file(s)"
+    }
+
+    $browserActivity = Find-BrowserRuntimeActivityLog -Files $logFiles
+    if ($browserActivity.Found) {
+        Add-Check "browser-runtime-activity-log" "PASS" $browserActivity.Detail
+    }
+    else {
+        Add-Check "browser-runtime-activity-log" "WARN" "No matched Browser activity turn in latest $RecentLogFileCount log file(s); after a manual Browser task, run scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -MinLogTime (Get-Date).AddMinutes(-10) -RequireBrowserRuntimeActivity for strict validation."
     }
 
     if ($unsupportedWorkspaceDependencyLines.Count -eq 0) {
