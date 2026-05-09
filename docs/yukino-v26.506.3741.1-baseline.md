@@ -21,6 +21,7 @@ The release assets remain valid. The later `f11af71` commit improves maintenance
 - Added a private-release safety gate that rejects a non-private repo, tracked credential/config paths, high-confidence key/token patterns, CPA skill identifiers, and CPA-related paths inside the MSIX.
 - Confirmed the CPA skill was not included in the repo or release assets.
 - Added a real release install smoke script: `scripts\Test-YukinoReleaseInstall.ps1`.
+- Added a read-only local diagnostic script: `scripts\Test-YukinoLocalState.ps1`.
 - Cleaned verification noise so `verify-yukino.ps1` reports real risks instead of upstream-shape or unrelated-log false warnings.
 
 ## Verification Evidence
@@ -30,6 +31,7 @@ Use these commands for this baseline:
 ```powershell
 npm test
 powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoLocalState.ps1
 git diff --check
 ```
 
@@ -37,6 +39,7 @@ Latest expected result:
 
 - `npm test`: PASS.
 - `verify-yukino.ps1`: PASS with zero warnings.
+- `scripts\Test-YukinoLocalState.ps1`: PASS, with warnings only when the worktree is intentionally dirty during development.
 - `git diff --check`: PASS.
 - Manual GUI smoke: passed by user confirmation.
 - Release install smoke: passed from downloaded private release assets; SHA matched the published checksum, installer completed, installed package verification passed, and Yukino launched.
@@ -61,13 +64,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoRelease
 ### Stability First
 
 - Keep this release as the stable baseline until a new upstream Codex package needs migration.
-- Keep `npm test`, `verify-yukino.ps1`, `git diff --check`, manual GUI smoke, and release install smoke as the minimum release closure bundle.
+- Keep `npm test`, `verify-yukino.ps1`, `scripts\Test-YukinoLocalState.ps1`, `git diff --check`, manual GUI smoke, and release install smoke as the minimum release closure bundle.
 - Keep generated directories out of git: `out/`, `logs/`, and `src_unpacked/`.
 
 ### Product Clarity
 
 - Add an in-app About or version surface that clearly says this is Yukino, shows the installed package version, and separates it from official Codex.
-- Add a compact local diagnostics view for `.yukino`, plugins, enabled bundled skills, sandbox mode, approval policy, and recent logs.
+- Promote the CLI local diagnostic into a compact in-app diagnostics view for `.yukino`, plugins, enabled bundled skills, sandbox mode, approval policy, and recent logs.
 - Make plugin and skill status easier to inspect from the UI before changing deeper runtime behavior.
 
 ### Update Discipline

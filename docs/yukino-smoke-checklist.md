@@ -8,6 +8,7 @@ For the current stable release baseline, see [yukino-v26.506.3741.1-baseline.md]
 
 - Run `npm test`.
 - Run `npm run verify`.
+- Run `npm run diagnose` for a read-only local state report.
 - Confirm latest build directory under `logs\build-*`.
 - Confirm latest MSIX under `out\yukino.akane_*_x64.msix`.
 - Confirm `C:\Users\Administrator\.yukino\build-history.jsonl` records the latest build when a build was run.

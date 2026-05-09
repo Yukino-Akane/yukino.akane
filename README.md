@@ -21,6 +21,7 @@ The repository tracks the rebuild scripts, source branding assets, verification 
 
 - `build-yukino.ps1`: copies the installed Codex Desktop package, patches branding and runtime assets, repacks `app.asar`, signs an MSIX, and can install it.
 - `verify-yukino.ps1`: checks the latest build output, installed package, config state, and recent app logs for the expected Yukino patches.
+- `scripts/Test-YukinoLocalState.ps1`: read-only local diagnostic for installed packages, `.yukino` config, plugins, logs, repo state, and release assets.
 - `assets/`: source images for Yukino AppX icons, the executable icon, and the desktop sidebar background.
 - `scripts/`: helper scripts used by the rebuild workflow.
 - `tests/`: focused PowerShell checks for source asset generation and injected UI patches.
@@ -81,6 +82,18 @@ Run all focused maintenance tests with:
 
 ```powershell
 npm test
+```
+
+Run a read-only local diagnostic when investigating a machine-specific issue:
+
+```powershell
+npm run diagnose
+```
+
+Equivalent direct command:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoLocalState.ps1
 ```
 
 After installation or release, use [docs/yukino-smoke-checklist.md](docs/yukino-smoke-checklist.md) for the manual GUI checks.
