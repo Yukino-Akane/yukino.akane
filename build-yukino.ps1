@@ -271,6 +271,7 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
     }
 
     $legacyPattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'
+    $skillsPageEntryGatePattern = '(?<enabled>[A-Za-z_$][A-Za-z0-9_$]*&&)!(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)(?=\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{\}\))'
     $patched = 0
     foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "gradient-*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
@@ -285,11 +286,25 @@ function Patch-PluginAuthGate([string]$AssetsDir) {
 
     foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "skills-page-*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
-        if (-not $text.Contains("pluginsAuthBlockedToast.title") -or -not $text.Contains("s&&!m")) {
+        if (-not $text.Contains("pluginsAuthBlockedToast.title")) {
             continue
         }
 
-        [IO.File]::WriteAllText($asset.FullName, $text.Replace("s&&!m", "s&&!0"), [Text.UTF8Encoding]::new($false))
+        $newText = [regex]::new($skillsPageEntryGatePattern).Replace($text, {
+            param($match)
+            $enabled = $match.Groups["enabled"].Value
+            "${enabled}!0"
+        }, 1)
+        if ($newText -eq $text) {
+            if ($text.Contains("s&&!m")) {
+                $newText = $text.Replace("s&&!m", "s&&!0")
+            }
+            else {
+                continue
+            }
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
         $patched += 1
     }
 

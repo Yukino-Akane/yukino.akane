@@ -15,6 +15,8 @@ $staleAgentSettingsWrite = 'T(`write-config-value`,{hostId:e,keyPath:n,value:r,m
 $patchedAgentSettingsWrite = 'T(`batch-write-config-value`,{hostId:e,edits:[{keyPath:n,value:r,mergeStrategy:`upsert`}],filePath:z.filePath,expectedVersion:null,reloadUserConfig:!0})'
 $staleAgentSettingsWriteRegex = '[A-Za-z_$][A-Za-z0-9_$]*\(`write-config-value`,\{hostId:[A-Za-z_$][A-Za-z0-9_$]*,keyPath:[A-Za-z_$][A-Za-z0-9_$]*,value:[A-Za-z_$][A-Za-z0-9_$]*,mergeStrategy:`upsert`,filePath:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?,expectedVersion:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?\}\)'
 $patchedAgentSettingsWriteRegex = '[A-Za-z_$][A-Za-z0-9_$]*\(`batch-write-config-value`,\{hostId:[A-Za-z_$][A-Za-z0-9_$]*,edits:\[\{keyPath:[A-Za-z_$][A-Za-z0-9_$]*,value:[A-Za-z_$][A-Za-z0-9_$]*,mergeStrategy:`upsert`\}\],filePath:[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?,expectedVersion:null,reloadUserConfig:!0\}\)'
+$skillsPageEntryGateRegex = '(?<enabled>[A-Za-z_$][A-Za-z0-9_$]*&&)!(?<gate>[A-Za-z_$][A-Za-z0-9_$]*)(?=\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{\}\))'
+$skillsPageEntryGatePatchedRegex = '[A-Za-z_$][A-Za-z0-9_$]*&&!0(?=\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{\}\))'
 $sidebarPluginGateRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*&&[A-Za-z_$][A-Za-z0-9_$]*'
 $sidebarPluginGatePatchedRegex = '\{authMethod:[A-Za-z_$][A-Za-z0-9_$]*\}=[A-Za-z_$][A-Za-z0-9_$]*\(\),[A-Za-z_$][A-Za-z0-9_$]*=[A-Za-z_$][A-Za-z0-9_$]*\(`533078438`\),[A-Za-z_$][A-Za-z0-9_$]*=!1,[A-Za-z_$][A-Za-z0-9_$]*=!1'
 $sidebarPluginRouteRegex = 'metadata:\{item:`skills`\}\}\),[A-Za-z_$][A-Za-z0-9_$]*\(`/skills`\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(`/skills`\),label:[A-Za-z_$][A-Za-z0-9_$]*\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
@@ -123,6 +125,16 @@ function Get-PngPixelSha256([string]$Path) {
     }
 }
 
+function Expand-AsarToTemp([string]$AsarPath) {
+    $extractRoot = Join-Path ([IO.Path]::GetTempPath()) ("yukino-installed-asar-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+    npx --yes @electron/asar extract $AsarPath $extractRoot | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to extract installed app.asar for verification."
+    }
+    return $extractRoot
+}
+
 Write-Host ""
 Write-Host "Yukino verification report" -ForegroundColor Cyan
 Write-Host "ProjectRoot: $ProjectRoot"
@@ -185,16 +197,20 @@ if ($latestBuild) {
         $skillsPageHasPatchedGate = $false
         $skillsPageHasDisabledPluginPage = $false
         $skillsPageHasDeepLinkToast = $false
+        $skillsPageHasOldEntryGate = $false
+        $skillsPageHasPatchedEntryGate = $false
         foreach ($asset in $skillsPageAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
             if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("pluginDeepLinkAuthBlocked")) {
                 $skillsPageHasDeepLinkToast = $true
             }
-            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!m")) {
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and ($text.Contains("s&&!m") -or [regex]::IsMatch($text, $skillsPageEntryGateRegex))) {
                 $skillsPageHasOldGate = $true
+                $skillsPageHasOldEntryGate = $true
             }
-            if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!0")) {
+            if ($text.Contains("pluginsAuthBlockedToast.title") -and ($text.Contains("s&&!0") -or [regex]::IsMatch($text, $skillsPageEntryGatePatchedRegex))) {
                 $skillsPageHasPatchedGate = $true
+                $skillsPageHasPatchedEntryGate = $true
             }
             if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
                 $skillsPageHasDisabledPluginPage = $true
@@ -237,14 +253,14 @@ if ($latestBuild) {
             }
         }
 
-        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedGate -and (-not $pluginDetailHasOldRedirect) -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
+        if ($gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedGate -and $skillsPageHasPatchedEntryGate -and (-not $pluginDetailHasOldRedirect) -and (-not $sidebarHasOldGate) -and $sidebarHasPatchedGate) {
             Add-Check "plugin-auth-gate" "PASS" "Desktop plugin auth gate is disabled in skills page and sidebar assets"
         }
-        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and (-not $pluginDetailHasOldRedirect) -and ($pluginDetailHasPatchedRedirect -or -not $skillsPageHasDeepLinkToast) -and (-not $sidebarHasOldGate)) {
+        elseif ($gradientAssets.Count -gt 0 -and $gateMatches -eq 0 -and (-not $skillsPageHasOldGate) -and (-not $skillsPageHasDisabledPluginPage) -and $skillsPageHasPatchedEntryGate -and (-not $pluginDetailHasOldRedirect) -and ($pluginDetailHasPatchedRedirect -or -not $skillsPageHasDeepLinkToast) -and (-not $sidebarHasOldGate)) {
             Add-Check "plugin-auth-gate" "PASS" "No ChatGPT API-key-only gate remains in gradient, plugin detail, or sidebar assets"
         }
         else {
-            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, skills-page disabled plugin page=$skillsPageHasDisabledPluginPage, plugin detail old redirect=$pluginDetailHasOldRedirect, plugin detail patched redirect=$pluginDetailHasPatchedRedirect, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
+            Add-Check "plugin-auth-gate" "FAIL" "$gateMatches legacy API-key gate match(es), skills-page old gate=$skillsPageHasOldGate, skills-page old entry gate=$skillsPageHasOldEntryGate, skills-page patched entry gate=$skillsPageHasPatchedEntryGate, skills-page disabled plugin page=$skillsPageHasDisabledPluginPage, plugin detail old redirect=$pluginDetailHasOldRedirect, plugin detail patched redirect=$pluginDetailHasPatchedRedirect, sidebar old gate=$sidebarHasOldGate, sidebar patched gate=$sidebarHasPatchedGate"
         }
 
         $sidebarHasOldPluginRoute = $false
@@ -373,18 +389,33 @@ if ($installed) {
 
     $installedAsar = Join-Path $installed.InstallLocation "app\resources\app.asar"
     if (Test-Path -LiteralPath $installedAsar) {
-        if (Get-Command rg -ErrorAction SilentlyContinue) {
-            & rg -a --fixed-strings --quiet -- $patchedAgentSettingsWrite $installedAsar
-            $installedHasPatchedWrite = $LASTEXITCODE -eq 0
-            if (-not $installedHasPatchedWrite) {
-                & rg -a --pcre2 --quiet -- $patchedAgentSettingsWriteRegex $installedAsar
-                $installedHasPatchedWrite = $LASTEXITCODE -eq 0
-            }
-            & rg -a --fixed-strings --quiet -- $staleAgentSettingsWrite $installedAsar
-            $installedHasStaleWrite = $LASTEXITCODE -eq 0
-            if (-not $installedHasStaleWrite) {
-                & rg -a --pcre2 --quiet -- $staleAgentSettingsWriteRegex $installedAsar
-                $installedHasStaleWrite = $LASTEXITCODE -eq 0
+        $installedExtractDir = $null
+        try {
+            $installedExtractDir = Expand-AsarToTemp $installedAsar
+            $installedAssetsDir = Join-Path $installedExtractDir "webview\assets"
+            $installedAgentAssets = @(Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "agent-settings-*.js" -ErrorAction SilentlyContinue)
+            $installedSkillsPageAssets = @(Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "skills-page-*.js" -ErrorAction SilentlyContinue)
+            $installedPluginDetailAssets = @(Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "plugin-detail-page-*.js" -ErrorAction SilentlyContinue)
+            $installedSidebarAssets = @(
+                Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "index-*.js" -ErrorAction SilentlyContinue
+                Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "app-main-*.js" -ErrorAction SilentlyContinue
+            ) | Sort-Object FullName -Unique
+            $installedSidebarCssAssets = @(
+                Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "index-*.css" -ErrorAction SilentlyContinue
+                Get-ChildItem -LiteralPath $installedAssetsDir -File -Filter "app-main-*.css" -ErrorAction SilentlyContinue
+            ) | Sort-Object FullName -Unique
+            $installedSidebarBackgroundAsset = Join-Path $installedAssetsDir "yukino-sidebar-background.png"
+
+            $installedHasPatchedWrite = $false
+            $installedHasStaleWrite = $false
+            foreach ($asset in $installedAgentAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if ($text.Contains($patchedAgentSettingsWrite) -or [regex]::IsMatch($text, $patchedAgentSettingsWriteRegex)) {
+                    $installedHasPatchedWrite = $true
+                }
+                if ($text.Contains($staleAgentSettingsWrite) -or [regex]::IsMatch($text, $staleAgentSettingsWriteRegex)) {
+                    $installedHasStaleWrite = $true
+                }
             }
             if ($installedHasPatchedWrite -and -not $installedHasStaleWrite) {
                 Add-Check "installed-agent-settings-patch" "PASS" $installedAsar
@@ -396,30 +427,70 @@ if ($installed) {
                 Add-Check "installed-agent-settings-patch" "FAIL" "Installed app.asar does not contain expected Agent Settings patch"
             }
 
-            & rg -a --pcre2 --quiet -- $sidebarPluginGateRegex $installedAsar
-            $installedHasSidebarPluginGate = $LASTEXITCODE -eq 0
-            & rg -a --pcre2 --quiet -- $sidebarPluginGatePatchedRegex $installedAsar
-            $installedHasPatchedSidebarPluginGate = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "pluginsAuthBlockedToast.title" $installedAsar
-            $installedHasSkillsPageAuthToast = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "s&&!0" $installedAsar
-            $installedHasPatchedSkillsPageGate = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "s&&!1" $installedAsar
-            $installedHasDisabledSkillsPageGate = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "pluginDeepLinkAuthBlocked" $installedAsar
-            $installedHasPluginDetailDeepLinkGate = $LASTEXITCODE -eq 0
-            & rg -a --pcre2 --quiet -- $pluginDetailRedirectRegex $installedAsar
-            $installedHasPluginDetailRedirect = $LASTEXITCODE -eq 0
-            & rg -a --pcre2 --quiet -- $pluginDetailRedirectPatchedRegex $installedAsar
-            $installedHasPatchedPluginDetailRedirect = $LASTEXITCODE -eq 0
+            $installedHasSkillsPageAuthToast = $false
+            $installedHasPatchedSkillsPageGate = $false
+            $installedHasOldSkillsPageEntryGate = $false
+            $installedHasDisabledSkillsPageGate = $false
+            $installedHasPluginDetailDeepLinkGate = $false
+            $installedHasPluginDetailRedirect = $false
+            $installedHasPatchedPluginDetailRedirect = $false
+            foreach ($asset in $installedSkillsPageAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if ($text.Contains("pluginsAuthBlockedToast.title")) {
+                    $installedHasSkillsPageAuthToast = $true
+                }
+                if ($text.Contains("pluginsAuthBlockedToast.title") -and ($text.Contains("s&&!0") -or [regex]::IsMatch($text, $skillsPageEntryGatePatchedRegex))) {
+                    $installedHasPatchedSkillsPageGate = $true
+                }
+                if ($text.Contains("pluginsAuthBlockedToast.title") -and ($text.Contains("s&&!m") -or [regex]::IsMatch($text, $skillsPageEntryGateRegex))) {
+                    $installedHasOldSkillsPageEntryGate = $true
+                }
+                if ($text.Contains("pluginsAuthBlockedToast.title") -and $text.Contains("s&&!1")) {
+                    $installedHasDisabledSkillsPageGate = $true
+                }
+                if ($text.Contains("pluginDeepLinkAuthBlocked")) {
+                    $installedHasPluginDetailDeepLinkGate = $true
+                }
+            }
+            foreach ($asset in $installedPluginDetailAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if (-not $text.Contains("pluginDeepLinkAuthBlocked")) {
+                    continue
+                }
+                if ([regex]::IsMatch($text, $pluginDetailRedirectRegex)) {
+                    $installedHasPluginDetailRedirect = $true
+                }
+                if ([regex]::IsMatch($text, $pluginDetailRedirectPatchedRegex)) {
+                    $installedHasPatchedPluginDetailRedirect = $true
+                }
+                $installedHasPluginDetailDeepLinkGate = $true
+            }
+
+            $installedHasSidebarPluginGate = $false
+            $installedHasPatchedSidebarPluginGate = $false
+            foreach ($asset in $installedSidebarAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if (-not $text.Contains("pluginsDisabledTooltip")) {
+                    continue
+                }
+                if ([regex]::IsMatch($text, $sidebarPluginGateRegex)) {
+                    $installedHasSidebarPluginGate = $true
+                }
+                if ([regex]::IsMatch($text, $sidebarPluginGatePatchedRegex)) {
+                    $installedHasPatchedSidebarPluginGate = $true
+                }
+            }
             if ($installedHasSkillsPageAuthToast -and $installedHasDisabledSkillsPageGate) {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle disables the Plugins page entry with s&&!1; rebuild and reinstall the MSIX"
+            }
+            elseif ($installedHasOldSkillsPageEntryGate) {
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle still gates the Plugins marketplace entry for API-key users; rebuild and reinstall the MSIX"
             }
             elseif ($installedHasPluginDetailRedirect) {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed plugin detail bundle still redirects API-key users back to Skills; rebuild and reinstall the MSIX"
             }
             elseif ($installedHasSkillsPageAuthToast -and (-not $installedHasPatchedSkillsPageGate) -and (-not $installedHasPatchedPluginDetailRedirect)) {
-                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle does not contain the expected s&&!0 Plugins page entry patch"
+                Add-Check "installed-plugin-auth-gate" "FAIL" "Installed skills-page bundle does not contain the expected Plugins page entry patch"
             }
             elseif ($installedHasPluginDetailDeepLinkGate -and -not $installedHasPatchedPluginDetailRedirect) {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed plugin detail bundle does not contain the expected patched deep-link redirect gate"
@@ -434,21 +505,16 @@ if ($installed) {
                 Add-Check "installed-plugin-auth-gate" "FAIL" "Installed app.asar does not contain the expected patched Plugins sidebar gate"
             }
 
-            & rg -a --pcre2 --quiet -- $sidebarPluginRouteRegex $installedAsar
-            $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
-            if (-not $installedHasSidebarPluginRoute) {
-                & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRouteRegex $installedAsar
-                $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
-            }
-            if (-not $installedHasSidebarPluginRoute) {
-                & rg -a --pcre2 --quiet -- $sidebarPluginRouteCurrentRegex $installedAsar
-                $installedHasSidebarPluginRoute = $LASTEXITCODE -eq 0
-            }
-            & rg -a --pcre2 --quiet -- $sidebarPluginRouteStatePatchedRegex $installedAsar
-            $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
-            if (-not $installedHasPatchedSidebarPluginRoute) {
-                & rg -a --pcre2 --quiet -- $sidebarPluginHandlerRouteStatePatchedRegex $installedAsar
-                $installedHasPatchedSidebarPluginRoute = $LASTEXITCODE -eq 0
+            $installedHasSidebarPluginRoute = $false
+            $installedHasPatchedSidebarPluginRoute = $false
+            foreach ($asset in $installedSidebarAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if ([regex]::IsMatch($text, $sidebarPluginRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRouteRegex) -or [regex]::IsMatch($text, $sidebarPluginRouteCurrentRegex)) {
+                    $installedHasSidebarPluginRoute = $true
+                }
+                if ([regex]::IsMatch($text, $sidebarPluginRouteStatePatchedRegex) -or [regex]::IsMatch($text, $sidebarPluginHandlerRouteStatePatchedRegex)) {
+                    $installedHasPatchedSidebarPluginRoute = $true
+                }
             }
             if ($installedHasPatchedSidebarPluginRoute -and -not $installedHasSidebarPluginRoute) {
                 Add-Check "installed-sidebar-plugin-route" "PASS" $installedAsar
@@ -460,16 +526,26 @@ if ($installed) {
                 Add-Check "installed-sidebar-plugin-route" "FAIL" "Installed app.asar does not contain the expected patched sidebar Plugins route"
             }
 
-            & rg -a --fixed-strings --quiet -- "yukino-sidebar-background.png" $installedAsar
-            $installedHasSidebarBackground = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;" $installedAsar
-            $installedHasAspectSafeSidebarBackground = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "background-position: left top, calc(var(--yukino-sidebar-background-half-width) - var(--yukino-sidebar-portrait-half-width)) center;" $installedAsar
-            $installedHasCenteredPortraitSidebarBackground = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, var(--yukino-sidebar-background-width) 100%;" $installedAsar
-            $installedHasDistortedSidebarBackground = $LASTEXITCODE -eq 0
-            & rg -a --fixed-strings --quiet -- "background-size: var(--yukino-sidebar-background-width) 100%, cover;" $installedAsar
-            $installedHasFullWindowCoverSidebarBackground = $LASTEXITCODE -eq 0
+            $installedHasSidebarBackground = Test-Path -LiteralPath $installedSidebarBackgroundAsset
+            $installedHasAspectSafeSidebarBackground = $false
+            $installedHasCenteredPortraitSidebarBackground = $false
+            $installedHasDistortedSidebarBackground = $false
+            $installedHasFullWindowCoverSidebarBackground = $false
+            foreach ($asset in $installedSidebarCssAssets) {
+                $text = [IO.File]::ReadAllText($asset.FullName)
+                if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, auto 100vh;")) {
+                    $installedHasAspectSafeSidebarBackground = $true
+                }
+                if ($text.Contains("background-position: left top, calc(var(--yukino-sidebar-background-half-width) - var(--yukino-sidebar-portrait-half-width)) center;")) {
+                    $installedHasCenteredPortraitSidebarBackground = $true
+                }
+                if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, var(--yukino-sidebar-background-width) 100%;")) {
+                    $installedHasDistortedSidebarBackground = $true
+                }
+                if ($text.Contains("background-size: var(--yukino-sidebar-background-width) 100%, cover;")) {
+                    $installedHasFullWindowCoverSidebarBackground = $true
+                }
+            }
             if (-not $installedHasSidebarBackground) {
                 Add-Check "installed-sidebar-background-patch" "FAIL" "Installed app.asar does not contain the Yukino sidebar background asset reference"
             }
@@ -480,11 +556,16 @@ if ($installed) {
                 Add-Check "installed-sidebar-background-patch" "PASS" $installedAsar
             }
         }
-        else {
-            Add-Check "installed-agent-settings-patch" "WARN" "rg is not available; skipped installed app.asar text probe"
-            Add-Check "installed-plugin-auth-gate" "WARN" "rg is not available; skipped installed plugin auth gate text probe"
-            Add-Check "installed-sidebar-plugin-route" "WARN" "rg is not available; skipped installed sidebar plugin route text probe"
-            Add-Check "installed-sidebar-background-patch" "WARN" "rg is not available; skipped installed sidebar background text probe"
+        catch {
+            Add-Check "installed-agent-settings-patch" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
+            Add-Check "installed-plugin-auth-gate" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
+            Add-Check "installed-sidebar-plugin-route" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
+            Add-Check "installed-sidebar-background-patch" "FAIL" "Unable to inspect installed app.asar assets: $($_.Exception.Message)"
+        }
+        finally {
+            if ($installedExtractDir -and (Test-Path -LiteralPath $installedExtractDir)) {
+                Remove-Item -LiteralPath $installedExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
     }
     else {

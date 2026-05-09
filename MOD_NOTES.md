@@ -90,10 +90,12 @@ Runtime and packaging:
 
 Plugin auth gate:
 
-- In current `skills-page-*.js` bundles, the Plugins page auth-block check is anchored near `pluginsAuthBlockedToast.title` and appears as `s&&!m`.
-- The intended Yukino patch is `s&&!m` -> `s&&!0`, which keeps the Plugins page entry enabled while bypassing the API-key guard.
+- In current `skills-page-*.js` bundles, the Plugins page auth-block check is anchored near `pluginsAuthBlockedToast.title`.
+- Older bundles used the concrete shape `s&&!m`; newer minified bundles may rename the same entry gate, for example `o&&!p`.
+- The intended Yukino patch is `enabled&&!gate` -> `enabled&&!0` (`s&&!0`, `o&&!0`, etc.), which keeps the Plugins marketplace entry enabled while bypassing the API-key guard.
 - Do not patch this shape to `s&&!1`; that makes the page-entry condition permanently false and leaves the sidebar Plugins flow stuck on the Skills surface.
-- `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require `s&&!0` and reject `s&&!1` in both latest build assets and installed `app.asar`.
+- `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require the patched `&&!0` entry gate and reject both stale gated forms and `s&&!1` in latest build assets and installed `app.asar`.
+- Installed verification must extract `app.asar` and inspect the real `webview\assets\*.js` files. Do not blindly scan the binary `app.asar`, because unrelated bundles can contain the same minified token shapes and produce false positives.
 
 Sidebar Plugins route:
 
@@ -111,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-yukino.ps1
 
 Latest observed result:
 
-- `latest-build`: PASS, `logs\build-20260509-111641`.
+- `latest-build`: PASS, `logs\build-20260509-113110`.
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `sidebar-plugin-route`: PASS.

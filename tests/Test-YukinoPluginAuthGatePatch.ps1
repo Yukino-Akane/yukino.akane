@@ -24,6 +24,7 @@ Assert-True $scriptText.Contains('s&&!0') "Plugin auth gate patch should keep th
 Assert-True (-not $scriptText.Contains('s&&!1')) "Plugin auth gate patch must not replace the Plugins page entry with a permanently false condition."
 Assert-True $scriptText.Contains("gradient-*.js") "Plugin auth gate patch should retain the older gradient bundle patch for older Codex Desktop builds."
 Assert-True $scriptText.Contains("pluginsAuthBlockedToast.title") "Plugin auth gate patch should anchor the current bundle patch near the plugin auth blocked toast."
+Assert-True $scriptText.Contains('$skillsPageEntryGatePattern') "Plugin auth gate patch should recognize minified skills page entry gates even when variable names change."
 Assert-True $scriptText.Contains("plugin-detail-page-*.js") "Plugin auth gate patch should scan the new plugin detail bundle used by current Codex Desktop builds."
 Assert-True $scriptText.Contains("pluginDeepLinkAuthBlocked") "Plugin auth gate patch should recognize the current plugin detail deep-link redirect guard."
 Assert-True $scriptText.Contains('$pluginDetailRedirectRegex') "Plugin auth gate patch should recognize the stale plugin detail deep-link redirect guard."
@@ -43,6 +44,9 @@ Assert-True $scriptText.Contains('state:{initialMode:`browse`,initialTab:`plugin
 
 $verifyText = [IO.File]::ReadAllText($verifyScript)
 Assert-True $verifyText.Contains('installed-plugin-auth-gate') "Verification should check whether the installed app.asar still has the sidebar Plugins auth gate."
+Assert-True $verifyText.Contains('$skillsPageEntryGateRegex') "Verification should detect unpatched minified skills page entry gates even when variable names change."
+Assert-True $verifyText.Contains('$skillsPageEntryGatePatchedRegex') "Verification should require the patched minified skills page entry gate to stay enabled."
+Assert-True $verifyText.Contains('Expand-AsarToTemp') "Verification should extract installed app.asar and inspect real webview assets instead of scanning unrelated binary content."
 Assert-True $verifyText.Contains('$sidebarPluginGateRegex') "Verification should recognize the stale installed sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginGatePatchedRegex') "Verification should recognize the patched installed sidebar Plugins auth gate."
 Assert-True $verifyText.Contains('$sidebarPluginHandlerRouteRegex') "Verification should recognize the current sidebar Plugins click-handler route shape."
