@@ -31,6 +31,9 @@ Assert-True $verifyText.Contains("chrome-plugin-build-cache") "Verification shou
 Assert-True $verifyText.Contains("installed-chrome-plugin-cache") "Verification should check the user's installed Chrome plugin cache."
 Assert-True $verifyText.Contains("chrome-native-host-yukino-target") "Verification should ensure Chrome's native host manifest points at Yukino's cache."
 Assert-True $verifyText.Contains("plugin_cache_windows_file_lock") "Verification should detect the Windows plugin cache lock failure in recent logs."
+Assert-True $verifyText.Contains("Historical/recovered") "Verification should distinguish recovered Chrome plugin cache lock evidence from active cache damage."
+Assert-True $verifyText.Contains("chrome-plugin-cache-pending-cleanup") "Verification should report delayed Chrome plugin cache cleanup state."
+Assert-True $verifyText.Contains("pending-delete.jsonl") "Verification should inspect the delayed Chrome plugin cleanup manifest."
 
 $localStateText = [IO.File]::ReadAllText($localStateScript)
 Assert-True $localStateText.Contains("chrome@openai-bundled") "Local diagnostics should inspect the bundled Chrome plugin setting."
@@ -38,6 +41,9 @@ Assert-True $localStateText.Contains("installed-chrome-plugin-cache") "Local dia
 Assert-True $localStateText.Contains("Repair-YukinoChromePluginCache.ps1") "Local diagnostics should try to repair an incomplete Chrome plugin cache."
 Assert-True $localStateText.Contains("chrome-native-host-yukino-target") "Local diagnostics should report whether the native host points to Yukino."
 Assert-True $localStateText.Contains("plugin_cache_windows_file_lock") "Local diagnostics should surface recent Chrome plugin cache lock failures."
+Assert-True $localStateText.Contains("Historical/recovered") "Local diagnostics should distinguish recovered Chrome plugin cache lock evidence from active cache damage."
+Assert-True $localStateText.Contains("chrome-plugin-cache-pending-cleanup") "Local diagnostics should report delayed Chrome plugin cache cleanup state."
+Assert-True $localStateText.Contains("pending-delete.jsonl") "Local diagnostics should inspect the delayed Chrome plugin cleanup manifest."
 
 $runnerText = [IO.File]::ReadAllText($testRunner)
 Assert-True $runnerText.Contains("Test-YukinoChromePluginDiagnostics.ps1") "The test suite should include the Chrome plugin diagnostic contract test."

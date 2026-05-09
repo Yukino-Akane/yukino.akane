@@ -125,6 +125,7 @@ Chrome plugin native host:
 - `build-yukino.ps1` must run `Patch-ChromeNativeHostCompatibility` after loose plugin resource branding so `scripts\extension-id.json` and `scripts\installManifest.mjs` keep `com.openai.codexextension`.
 - `verify-yukino.ps1` and `scripts\Test-YukinoLocalState.ps1` must check the bundled Chrome plugin cache, installed user cache, and `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.openai.codexextension` manifest target.
 - Short-term model: Yukino and official Codex share the public extension/native-host name, with the registry manifest pointing to Yukino's cache. Full isolation requires a Yukino-specific Chrome extension.
+- `scripts\Repair-YukinoChromePluginCache.ps1` must recover from Windows file locks by building a complete recovery cache directory, retargeting `chrome\latest`, and recording locked stale paths in `chrome\pending-delete.jsonl` for delayed cleanup. Do not make repair success depend on deleting the locked old cache synchronously.
 
 ## Latest Verified State
 
@@ -160,7 +161,8 @@ Latest observed result:
 - `chrome-native-host-yukino-target`: PASS, `com.openai.codexextension.json` points to `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\latest\extension-host\windows\x64\extension-host.exe`.
 - `latest-batch-write-log`: PASS when no recent `config/batchWrite` evidence exists; the detail asks for a manual settings write when validating that patch.
 - `recent-config-conflicts`: PASS when recent `-32600` lines are unrelated to `config/...` methods.
-- `plugin_cache_windows_file_lock`: WARN only for the old pre-repair log line until Yukino is restarted and fresh logs confirm it no longer recurs.
+- `chrome-plugin-cache-pending-cleanup`: PASS when no delayed cleanup manifest remains under `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\pending-delete.jsonl`.
+- `plugin_cache_windows_file_lock`: WARN can be historical/recovered when `latest` is complete and no pending cleanup manifest remains. Treat it as active damage only when paired with an incomplete `latest` cache or pending cleanup entries.
 - `post-install-browser-smoke`: PASS; current installed Yukino has a Yukino-path app-server process, Browser runtime pipe log, Yukino `node_repl.exe`, enabled Chrome extension, native host manifest targeting Yukino's cache, and a non-disruptive `about:blank` Chrome dry-run.
 
 Sandbox compatibility note:

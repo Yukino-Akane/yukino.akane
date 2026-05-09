@@ -22,6 +22,82 @@ function Copy-DirectoryContent([string]$Source, [string]$Destination) {
     }
 }
 
+function Get-PendingDeleteManifestPath([string]$ChromeCacheRoot) {
+    return Join-Path $ChromeCacheRoot "pending-delete.jsonl"
+}
+
+function Add-PendingDeletePath([string]$ChromeCacheRoot, [string]$Path, [string]$Reason) {
+    New-Item -ItemType Directory -Path $ChromeCacheRoot -Force | Out-Null
+    $record = [pscustomobject]@{
+        path = $Path
+        reason = $Reason
+        recordedAt = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    $json = $record | ConvertTo-Json -Compress
+    Add-Content -LiteralPath (Get-PendingDeleteManifestPath -ChromeCacheRoot $ChromeCacheRoot) -Value $json -Encoding UTF8
+}
+
+function Invoke-PendingDeleteCleanup([string]$ChromeCacheRoot) {
+    $manifest = Get-PendingDeleteManifestPath -ChromeCacheRoot $ChromeCacheRoot
+    if (-not (Test-Path -LiteralPath $manifest)) {
+        return
+    }
+
+    $remaining = New-Object System.Collections.Generic.List[string]
+    foreach ($line in [IO.File]::ReadLines($manifest)) {
+        if (-not $line.Trim()) {
+            continue
+        }
+
+        try {
+            $record = $line | ConvertFrom-Json -ErrorAction Stop
+            $path = [string]$record.path
+        }
+        catch {
+            continue
+        }
+
+        if (-not $path) {
+            continue
+        }
+
+        if (Test-Path -LiteralPath $path) {
+            try {
+                Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            }
+            catch {
+                $remaining.Add($line) | Out-Null
+            }
+        }
+    }
+
+    if ($remaining.Count -eq 0) {
+        Remove-Item -LiteralPath $manifest -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        [IO.File]::WriteAllLines($manifest, [string[]]$remaining, [Text.UTF8Encoding]::new($false))
+    }
+}
+
+function Write-PluginCache([string]$SourcePlugin, [string]$TargetPlugin, [string]$NativeHostName) {
+    New-Item -ItemType Directory -Path $TargetPlugin -Force | Out-Null
+
+    foreach ($relative in @(".codex-plugin", "assets", "scripts", "skills")) {
+        $source = Join-Path $SourcePlugin $relative
+        if (Test-Path -LiteralPath $source) {
+            Copy-DirectoryContent -Source $source -Destination (Join-Path $TargetPlugin $relative)
+        }
+    }
+
+    $targetHost = Join-Path $TargetPlugin "extension-host"
+    if (-not (Test-Path -LiteralPath (Join-Path $targetHost "windows\x64\extension-host.exe"))) {
+        $sourceHost = Resolve-ExistingPath (Join-Path $SourcePlugin "extension-host") "Chrome extension host"
+        Copy-Item -LiteralPath $sourceHost -Destination $targetHost -Recurse -Force
+    }
+
+    Patch-ChromeNativeHostName -PluginRoot $TargetPlugin -HostName $NativeHostName
+}
+
 function Patch-ChromeNativeHostName([string]$PluginRoot, [string]$HostName) {
     $extensionIdPath = Join-Path $PluginRoot "scripts\extension-id.json"
     if (Test-Path -LiteralPath $extensionIdPath) {
@@ -44,7 +120,17 @@ function Patch-ChromeNativeHostName([string]$PluginRoot, [string]$HostName) {
 function Ensure-LatestLink([string]$ChromeCacheRoot, [string]$TargetPath) {
     $latest = Join-Path $ChromeCacheRoot "latest"
     if (Test-Path -LiteralPath $latest) {
-        return
+        try {
+            $current = Get-Item -LiteralPath $latest -Force
+            $targetFullPath = (Resolve-Path -LiteralPath $TargetPath).Path
+            if ($current.LinkType -eq "Junction" -and $current.Target -contains $targetFullPath) {
+                return
+            }
+            Remove-Item -LiteralPath $latest -Force -Recurse -ErrorAction Stop
+        }
+        catch {
+            Add-PendingDeletePath -ChromeCacheRoot $ChromeCacheRoot -Path $latest -Reason "latest_retarget_failed"
+        }
     }
 
     try {
@@ -72,23 +158,21 @@ if (-not $PluginVersion) {
 }
 
 $chromeCacheRoot = Join-Path $resolvedYukinoHome "plugins\cache\openai-bundled\chrome"
+New-Item -ItemType Directory -Path $chromeCacheRoot -Force | Out-Null
+Invoke-PendingDeleteCleanup -ChromeCacheRoot $chromeCacheRoot
+
 $targetPlugin = Join-Path $chromeCacheRoot $PluginVersion
-New-Item -ItemType Directory -Path $targetPlugin -Force | Out-Null
-
-foreach ($relative in @(".codex-plugin", "assets", "scripts", "skills")) {
-    $source = Join-Path $sourcePlugin $relative
-    if (Test-Path -LiteralPath $source) {
-        Copy-DirectoryContent -Source $source -Destination (Join-Path $targetPlugin $relative)
-    }
+try {
+    Write-PluginCache -SourcePlugin $sourcePlugin -TargetPlugin $targetPlugin -NativeHostName $NativeHostName
+}
+catch {
+    $lockedTarget = $targetPlugin
+    Add-PendingDeletePath -ChromeCacheRoot $chromeCacheRoot -Path $lockedTarget -Reason "primary_cache_update_failed"
+    $recoveryName = "{0}-recovery-{1}" -f $PluginVersion, (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
+    $targetPlugin = Join-Path $chromeCacheRoot $recoveryName
+    Write-PluginCache -SourcePlugin $sourcePlugin -TargetPlugin $targetPlugin -NativeHostName $NativeHostName
 }
 
-$targetHost = Join-Path $targetPlugin "extension-host"
-if (-not (Test-Path -LiteralPath (Join-Path $targetHost "windows\x64\extension-host.exe"))) {
-    $sourceHost = Resolve-ExistingPath (Join-Path $sourcePlugin "extension-host") "Chrome extension host"
-    Copy-Item -LiteralPath $sourceHost -Destination $targetHost -Recurse -Force
-}
-
-Patch-ChromeNativeHostName -PluginRoot $targetPlugin -HostName $NativeHostName
 Ensure-LatestLink -ChromeCacheRoot $chromeCacheRoot -TargetPath $targetPlugin
 
 [pscustomobject]@{

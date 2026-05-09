@@ -179,6 +179,37 @@ function Add-InstalledChromePluginCacheCheck([string]$PluginRoot) {
     Add-Check "installed-chrome-plugin-cache" "FAIL" "Incomplete Chrome plugin cache at $PluginRoot; missing or invalid: $($result.Missing -join '; ')"
 }
 
+function Add-ChromePluginCachePendingCleanupCheck([string]$ChromeCacheRoot) {
+    $pendingManifest = Join-Path $ChromeCacheRoot "pending-delete.jsonl"
+    if (-not (Test-Path -LiteralPath $pendingManifest)) {
+        Add-Check "chrome-plugin-cache-pending-cleanup" "PASS" "No pending delayed cleanup manifest: $pendingManifest"
+        return
+    }
+
+    $pending = @()
+    foreach ($line in [IO.File]::ReadLines($pendingManifest)) {
+        if (-not $line.Trim()) {
+            continue
+        }
+        try {
+            $record = $line | ConvertFrom-Json -ErrorAction Stop
+            if ($record.path) {
+                $pending += [string]$record.path
+            }
+        }
+        catch {
+            $pending += "invalid manifest line"
+        }
+    }
+
+    if ($pending.Count -eq 0) {
+        Add-Check "chrome-plugin-cache-pending-cleanup" "PASS" "Delayed cleanup manifest is empty: $pendingManifest"
+    }
+    else {
+        Add-Check "chrome-plugin-cache-pending-cleanup" "WARN" "$($pending.Count) pending path(s) in $pendingManifest; latest=$($pending[0])"
+    }
+}
+
 function Get-RegistryDefaultValue([string]$RegistryKey) {
     $output = & reg query $RegistryKey /ve 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $output) {
@@ -957,8 +988,10 @@ else {
     Add-Check "config-file" "FAIL" "Missing config: $ConfigPath"
 }
 
-$installedChromePluginRoot = Join-Path $env:USERPROFILE ".yukino\plugins\cache\openai-bundled\chrome\latest"
+$installedChromeCacheRoot = Join-Path $env:USERPROFILE ".yukino\plugins\cache\openai-bundled\chrome"
+$installedChromePluginRoot = Join-Path $installedChromeCacheRoot "latest"
 Add-InstalledChromePluginCacheCheck $installedChromePluginRoot
+Add-ChromePluginCachePendingCleanupCheck $installedChromeCacheRoot
 
 $nativeHostStatus = Test-ChromeNativeHostYukinoTarget
 if ($nativeHostStatus.Correct) {
@@ -1039,7 +1072,9 @@ if (Test-Path -LiteralPath $appLogDir) {
         Add-Check "plugin_cache_windows_file_lock" "PASS" "No Chrome plugin cache lock failures in latest $RecentLogFileCount log file(s)"
     }
     else {
-        Add-Check "plugin_cache_windows_file_lock" "WARN" "$($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
+        $cacheRecovered = (Test-ChromePluginCache -PluginRoot $installedChromePluginRoot).Complete -and -not (Test-Path -LiteralPath (Join-Path $installedChromeCacheRoot "pending-delete.jsonl"))
+        $prefix = if ($cacheRecovered) { "Historical/recovered" } else { "Active or unrecovered" }
+        Add-Check "plugin_cache_windows_file_lock" "WARN" "$prefix Chrome plugin cache lock evidence: $($pluginCacheLockLines.Count) line(s); latest=$($pluginCacheLockLines[0])"
     }
 }
 else {
