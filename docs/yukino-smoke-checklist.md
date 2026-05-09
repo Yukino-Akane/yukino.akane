@@ -25,6 +25,7 @@ For the current stable release baseline, see [yukino-v26.506.3741.1-baseline.md]
 - Confirm the sidebar background is visible and not stretched.
 - Confirm `.yukino` remains the active config home.
 - Confirm official OpenAI.Codex remains installed and separate from Yukino.
+- After a manual Browser task in Yukino, run `scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -MinLogTime (Get-Date).AddMinutes(-10) -RequireBrowserRuntimeActivity` to verify the matched Browser turn log evidence.
 
 ## Release
 

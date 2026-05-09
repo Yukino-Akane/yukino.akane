@@ -25,6 +25,7 @@ Assert-True $scriptText.Contains("Install-YukinoRelease.ps1") "Release install s
 Assert-True $scriptText.Contains("verify-yukino.ps1") "Release install smoke should run installed-package verification after installing."
 Assert-True $scriptText.Contains("Start-Process") "Release install smoke should perform a launch check against the installed executable."
 Assert-True $scriptText.Contains("Test-YukinoPostInstallBrowserSmoke.ps1") "Release install smoke should run the post-install Browser smoke after launch."
+Assert-True $scriptText.Contains("RequireBrowserRuntimeActivity") "Release install smoke should allow strict Browser activity verification after a manual Browser tool call."
 Assert-True $scriptText.Contains("Remove-Item") "Release install smoke should clean downloaded release assets unless preservation is requested."
 
 $browserSmokeText = [IO.File]::ReadAllText($browserSmokeScript)
@@ -32,6 +33,9 @@ Assert-True $browserSmokeText.Contains("installed-yukino-package") "Post-install
 Assert-True $browserSmokeText.Contains("app-server-yukino-process") "Post-install Browser smoke should verify the app-server process is running from Yukino."
 Assert-True $browserSmokeText.Contains("browser-use-native-pipe-server") "Post-install Browser smoke should verify Browser runtime pipe log markers."
 Assert-True $browserSmokeText.Contains("node_repl.exe") "Post-install Browser smoke should verify a live Yukino node_repl runtime."
+Assert-True $browserSmokeText.Contains("browser-runtime-activity-log") "Post-install Browser smoke should emit strict real Browser runtime activity evidence when requested."
+Assert-True $browserSmokeText.Contains("Find-FirstRecentLogMatch") "Post-install Browser smoke should avoid stale Browser runtime log lines by parsing log line timestamps."
+Assert-True $browserSmokeText.Contains("Find-BrowserRuntimeActivityLog") "Post-install Browser smoke should match strict Browser activity start/end markers by turnId."
 Assert-True $browserSmokeText.Contains('"node-repl-yukino-runtime" "WARN"') "Release install smoke should not fail solely because Browser runtime is lazy and untriggered."
 Assert-True $browserSmokeText.Contains("Browser runtime has not been triggered") "Release install smoke should report lazy Browser runtime evidence clearly."
 Assert-True $browserSmokeText.Contains("check-extension-installed.js") "Post-install Browser smoke should verify the Chrome extension is installed and enabled."

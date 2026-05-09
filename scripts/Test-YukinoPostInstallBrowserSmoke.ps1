@@ -3,6 +3,7 @@ param(
     [string]$PackageName = "yukino.akane",
     [int]$RecentLogFileCount = 12,
     [datetime]$MinLogTime = [datetime]::MinValue,
+    [switch]$RequireBrowserRuntimeActivity,
     [switch]$OpenChromeWindow
 )
 
@@ -96,6 +97,127 @@ function Find-FirstLogMatch([object[]]$Files, [string]$Pattern) {
     return ""
 }
 
+function Convert-ToDateTimeOffset([datetime]$Value) {
+    if ($Value -eq [datetime]::MinValue) {
+        return $null
+    }
+    if ($Value.Kind -eq [DateTimeKind]::Unspecified) {
+        $Value = [datetime]::SpecifyKind($Value, [DateTimeKind]::Local)
+    }
+    return [datetimeoffset]::new($Value)
+}
+
+function Get-LogLineTimestamp([string]$Line) {
+    $match = [regex]::Match($Line, "^(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s+")
+    if (-not $match.Success) {
+        return $null
+    }
+
+    try {
+        return [datetimeoffset]::Parse(
+            $match.Groups["timestamp"].Value,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind
+        )
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-LogLineAtOrAfter([string]$Line, [datetime]$MinTime) {
+    $minOffset = Convert-ToDateTimeOffset -Value $MinTime
+    if ($null -eq $minOffset) {
+        return $true
+    }
+
+    $lineOffset = Get-LogLineTimestamp -Line $Line
+    if ($null -eq $lineOffset) {
+        return $false
+    }
+
+    return $lineOffset -ge $minOffset
+}
+
+function Find-FirstRecentLogMatch([object[]]$Files, [string]$Pattern, [datetime]$MinTime) {
+    foreach ($file in $Files) {
+        $matches = @(Select-String -LiteralPath $file.FullName -Pattern $Pattern -CaseSensitive:$false -ErrorAction SilentlyContinue)
+        foreach ($match in $matches) {
+            if (Test-LogLineAtOrAfter -Line $match.Line -MinTime $MinTime) {
+                return "$($file.Name):$($match.LineNumber):$($match.Line)"
+            }
+        }
+    }
+    return ""
+}
+
+function Get-LogLineField([string]$Line, [string]$Name) {
+    $match = [regex]::Match($Line, "(?:^|\s)$([regex]::Escape($Name))=(?<value>[^\s]+)")
+    if ($match.Success) {
+        return $match.Groups["value"].Value.Trim('"')
+    }
+    return ""
+}
+
+function Find-BrowserRuntimeActivityLog([object[]]$Files, [datetime]$MinTime) {
+    $startsByTurn = @{}
+    $endsByTurn = @{}
+
+    foreach ($file in $Files) {
+        $matches = @(Select-String -LiteralPath $file.FullName -Pattern "IAB_LIFECYCLE (captured turn route|ended browser use turn route)" -CaseSensitive:$false -ErrorAction SilentlyContinue)
+        foreach ($match in $matches) {
+            if (-not (Test-LogLineAtOrAfter -Line $match.Line -MinTime $MinTime)) {
+                continue
+            }
+
+            $turnId = Get-LogLineField -Line $match.Line -Name "turnId"
+            if (-not $turnId) {
+                continue
+            }
+
+            $timestamp = Get-LogLineTimestamp -Line $match.Line
+            if ($null -eq $timestamp) {
+                continue
+            }
+
+            $entry = [pscustomobject]@{
+                TurnId = $turnId
+                Timestamp = $timestamp
+                Detail = "$($file.Name):$($match.LineNumber):$($match.Line)"
+            }
+
+            if ($match.Line -like "*captured turn route*") {
+                $startsByTurn[$turnId] = $entry
+            }
+            elseif ($match.Line -like "*ended browser use turn route*") {
+                $endsByTurn[$turnId] = $entry
+            }
+        }
+    }
+
+    foreach ($turnId in $startsByTurn.Keys) {
+        if (-not $endsByTurn.ContainsKey($turnId)) {
+            continue
+        }
+
+        $start = $startsByTurn[$turnId]
+        $end = $endsByTurn[$turnId]
+        if ($end.Timestamp -ge $start.Timestamp) {
+            return [pscustomobject]@{
+                Found = $true
+                TurnId = $turnId
+                Detail = "turnId=$turnId; turnStart=$($start.Detail); turnEnd=$($end.Detail)"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Found = $false
+        TurnId = ""
+        Detail = ""
+    }
+}
+
 function Test-YukinoProcessPath([string]$Path, [string]$InstallLocation) {
     if (-not $Path) {
         return $false
@@ -113,6 +235,9 @@ Write-Host "ProjectRoot: $ProjectRoot"
 Write-Host "Package    : $PackageName"
 if ($MinLogTime -ne [datetime]::MinValue) {
     Write-Host "MinLogTime : $($MinLogTime.ToString('o'))"
+}
+if ($RequireBrowserRuntimeActivity) {
+    Write-Host "Browser runtime activity evidence is required."
 }
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -180,7 +305,12 @@ else {
         Add-Check "node-repl-yukino-runtime" "PASS" "$($yukinoNodeRepl.Count) node_repl.exe process(es); $((@($yukinoNodeRepl | Select-Object -ExpandProperty ExecutablePath -Unique)) -join '; ')"
     }
     else {
-        Add-Check "node-repl-yukino-runtime" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "a live Yukino node_repl.exe runtime")
+        if ($RequireBrowserRuntimeActivity) {
+            Add-Check "node-repl-yukino-runtime" "FAIL" "No live Yukino node_repl.exe runtime after Browser activity was required."
+        }
+        else {
+            Add-Check "node-repl-yukino-runtime" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "a live Yukino node_repl.exe runtime")
+        }
     }
 }
 
@@ -204,20 +334,50 @@ else {
         Add-Check "app-server-log" "FAIL" "No recent AppServerConnection success marker in latest $RecentLogFileCount log file(s)."
     }
 
-    $browserPipeLog = Find-FirstLogMatch -Files $logStatus.Files -Pattern "browser-use native pipe listening"
+    $browserPipeLog = Find-FirstRecentLogMatch -Files $logStatus.Files -Pattern "browser-use native pipe listening" -MinTime $MinLogTime
+    if (-not $browserPipeLog -and $RequireBrowserRuntimeActivity) {
+        $browserPipeLog = Find-FirstLogMatch -Files $logStatus.Files -Pattern "browser-use native pipe listening"
+    }
     if ($browserPipeLog) {
         Add-Check "browser-use-native-pipe-server" "PASS" $browserPipeLog
     }
     else {
-        Add-Check "browser-use-native-pipe-server" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the browser-use native pipe listening log marker")
+        if ($RequireBrowserRuntimeActivity) {
+            Add-Check "browser-use-native-pipe-server" "FAIL" "No recent browser-use native pipe listening log marker at or after $($MinLogTime.ToString('o'))."
+        }
+        else {
+            Add-Check "browser-use-native-pipe-server" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the browser-use native pipe listening log marker")
+        }
     }
 
-    $runtimePathLog = Find-FirstLogMatch -Files $logStatus.Files -Pattern "BrowserUseThreadConfig.*OpenAI\\Yukino\\bin\\node_repl\.exe"
+    $runtimePathLog = Find-FirstRecentLogMatch -Files $logStatus.Files -Pattern "BrowserUseThreadConfig.*OpenAI\\Yukino\\bin\\node_repl\.exe" -MinTime $MinLogTime
+    if (-not $runtimePathLog -and $RequireBrowserRuntimeActivity) {
+        $runtimePathLog = Find-FirstLogMatch -Files $logStatus.Files -Pattern "BrowserUseThreadConfig.*OpenAI\\Yukino\\bin\\node_repl\.exe"
+    }
     if ($runtimePathLog) {
         Add-Check "browser-runtime-yukino-path-log" "PASS" $runtimePathLog
     }
     else {
-        Add-Check "browser-runtime-yukino-path-log" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the BrowserUseThreadConfig Yukino runtime path log marker")
+        if ($RequireBrowserRuntimeActivity) {
+            Add-Check "browser-runtime-yukino-path-log" "FAIL" "No recent BrowserUseThreadConfig Yukino runtime path log marker at or after $($MinLogTime.ToString('o'))."
+        }
+        else {
+            Add-Check "browser-runtime-yukino-path-log" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the BrowserUseThreadConfig Yukino runtime path log marker")
+        }
+    }
+
+    $activityLog = Find-BrowserRuntimeActivityLog -Files $logStatus.Files -MinTime $MinLogTime
+    if ($activityLog.Found) {
+        Add-Check "browser-runtime-activity-log" "PASS" $activityLog.Detail
+    }
+    elseif ($RequireBrowserRuntimeActivity) {
+        Add-Check "browser-runtime-activity-log" "FAIL" "Missing recent matched Browser runtime activity log markers: captured turn route and ended browser use turn route with the same turnId; MinLogTime=$($MinLogTime.ToString('o')). Trigger Yukino with a Browser task such as opening https://example.com, then rerun this smoke with -RequireBrowserRuntimeActivity."
+    }
+
+    $createTabLog = Find-FirstRecentLogMatch -Files $logStatus.Files -Pattern "browser-use-iab-api.*iab createTab mapped page to tab" -MinTime $MinLogTime
+    $pageReadyLog = Find-FirstRecentLogMatch -Files $logStatus.Files -Pattern "browser-sidebar-manager.*browser sidebar dom-ready.*url=" -MinTime $MinLogTime
+    if ($createTabLog -or $pageReadyLog) {
+        Add-Check "browser-runtime-tab-log" "PASS" "createTab=$createTabLog; pageReady=$pageReadyLog"
     }
 }
 

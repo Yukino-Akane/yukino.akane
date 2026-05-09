@@ -138,6 +138,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoRelease
 
 The install smoke downloads the private GitHub release assets, verifies `SHA256SUMS.txt`, runs the published installer, runs `verify-yukino.ps1`, launches the installed `Yukino.exe`, and removes the temporary download directory.
 
+When you have just performed a manual Browser GUI smoke in Yukino, rerun the post-install Browser smoke in strict mode to pin the real Browser tool turn to the current log window:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -MinLogTime (Get-Date).AddMinutes(-10) -RequireBrowserRuntimeActivity
+```
+
 ## Repository Policy
 
 Do not commit generated directories:

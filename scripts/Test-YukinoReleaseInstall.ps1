@@ -5,6 +5,7 @@ param(
     [string]$PackageName = "yukino.akane",
     [switch]$SkipLaunch,
     [switch]$SkipBrowserSmoke,
+    [switch]$RequireBrowserRuntimeActivity,
     [switch]$KeepDownloadedAssets
 )
 
@@ -128,7 +129,11 @@ try {
         Write-Host "Launch smoke: started process $($process.Id); running Yukino process count $($running.Count)."
 
         if (-not $SkipBrowserSmoke) {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $browserSmokeScript -ProjectRoot $project -PackageName $PackageName -MinLogTime $launchStart
+            $browserSmokeArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $browserSmokeScript, "-ProjectRoot", $project, "-PackageName", $PackageName, "-MinLogTime", $launchStart)
+            if ($RequireBrowserRuntimeActivity) {
+                $browserSmokeArgs += "-RequireBrowserRuntimeActivity"
+            }
+            & powershell @browserSmokeArgs
             if ($LASTEXITCODE -ne 0) {
                 throw "Test-YukinoPostInstallBrowserSmoke.ps1 failed after release installation."
             }

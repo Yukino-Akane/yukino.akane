@@ -24,6 +24,14 @@ Assert-True $browserSmokeText.Contains("app-server-yukino-process") "Post-instal
 Assert-True $browserSmokeText.Contains("browser-use-native-pipe-server") "Post-install Browser smoke should verify Browser runtime pipe log markers."
 Assert-True $browserSmokeText.Contains("BrowserUseThreadConfig") "Post-install Browser smoke should verify Browser runtime path selection."
 Assert-True $browserSmokeText.Contains("node_repl.exe") "Post-install Browser smoke should verify a live Yukino node_repl runtime."
+Assert-True $browserSmokeText.Contains("RequireBrowserRuntimeActivity") "Post-install Browser smoke should support strict Browser runtime activity checks after a manual Browser tool call."
+Assert-True $browserSmokeText.Contains("Find-FirstRecentLogMatch") "Post-install Browser smoke should filter Browser runtime evidence by log line timestamp, not just file mtime."
+Assert-True $browserSmokeText.Contains("browser-runtime-activity-log") "Post-install Browser smoke should emit a named Browser runtime activity check."
+Assert-True $browserSmokeText.Contains("Find-BrowserRuntimeActivityLog") "Post-install Browser smoke should pair Browser activity start/end markers instead of accepting unrelated lines."
+Assert-True $browserSmokeText.Contains("captured turn route") "Post-install Browser smoke should require a real Browser tool turn in strict mode."
+Assert-True $browserSmokeText.Contains("ended browser use turn route") "Post-install Browser smoke should require a completed Browser tool turn in strict mode."
+Assert-True $browserSmokeText.Contains("turnId") "Post-install Browser smoke should match Browser activity markers by turnId."
+Assert-True $browserSmokeText.Contains("browser-runtime-tab-log") "Post-install Browser smoke should report stronger tab/page evidence when available without requiring a new tab every run."
 Assert-True $browserSmokeText.Contains('"node-repl-yukino-runtime" "WARN"') "Post-install Browser smoke should warn, not fail, when Browser runtime has not been triggered yet."
 Assert-True $browserSmokeText.Contains('"browser-use-native-pipe-server" "WARN"') "Post-install Browser smoke should warn, not fail, when the Browser pipe has not been triggered yet."
 Assert-True $browserSmokeText.Contains('"browser-runtime-yukino-path-log" "WARN"') "Post-install Browser smoke should warn, not fail, when runtime path logs have not been triggered yet."
@@ -41,6 +49,7 @@ Assert-True $releaseInstallText.Contains("Test-YukinoPostInstallBrowserSmoke.ps1
 Assert-True $releaseInstallText.Contains("SkipBrowserSmoke") "Release install smoke should allow skipping Browser smoke when launch is skipped."
 Assert-True $releaseInstallText.Contains("launchStart") "Release install smoke should capture launch time before invoking Browser smoke."
 Assert-True $releaseInstallText.Contains("-MinLogTime") "Release install smoke should pass the launch time to Browser smoke."
+Assert-True $releaseInstallText.Contains("RequireBrowserRuntimeActivity") "Release install smoke should expose strict Browser runtime activity checks for manual post-install verification."
 
 $runnerText = [IO.File]::ReadAllText($testRunner)
 Assert-True $runnerText.Contains("Test-YukinoPostInstallBrowserSmoke.ps1") "The test suite should include the post-install Browser smoke contract test."

@@ -163,7 +163,7 @@ Latest observed result:
 - `recent-config-conflicts`: PASS when recent `-32600` lines are unrelated to `config/...` methods.
 - `chrome-plugin-cache-pending-cleanup`: PASS when no delayed cleanup manifest remains under `%USERPROFILE%\.yukino\plugins\cache\openai-bundled\chrome\pending-delete.jsonl`.
 - `plugin_cache_windows_file_lock`: WARN can be historical/recovered when `latest` is complete and no pending cleanup manifest remains. Treat it as active damage only when paired with an incomplete `latest` cache or pending cleanup entries.
-- `post-install-browser-smoke`: PASS; current installed Yukino has a Yukino-path app-server process, Browser runtime pipe log, Yukino `node_repl.exe`, enabled Chrome extension, native host manifest targeting Yukino's cache, and a non-disruptive `about:blank` Chrome dry-run.
+- `post-install-browser-smoke`: PASS; current installed Yukino has a Yukino-path app-server process, Browser runtime pipe log, Yukino `node_repl.exe`, enabled Chrome extension, native host manifest targeting Yukino's cache, and a non-disruptive `about:blank` Chrome dry-run. When a manual Browser GUI smoke has just run, `scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -RequireBrowserRuntimeActivity` also requires matched `IAB_LIFECYCLE` Browser turn start/end log lines with the same `turnId`.
 
 Sandbox compatibility note:
 
@@ -205,6 +205,12 @@ Run a private release install smoke after publishing:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoReleaseInstall.ps1 -Tag v<version>-yukino.<n>
+```
+
+Verify a just-completed manual Browser GUI smoke without reinstalling:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -MinLogTime (Get-Date).AddMinutes(-10) -RequireBrowserRuntimeActivity
 ```
 
 Publish a private GitHub release:
