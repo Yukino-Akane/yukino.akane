@@ -15,6 +15,7 @@ $tests = @(
     "Test-YukinoBuildAudit.ps1",
     "Test-YukinoVerificationWarnings.ps1",
     "Test-YukinoLocalState.ps1",
+    "Test-YukinoSettingsDiagnosticsEntry.ps1",
     "Test-YukinoControlHome.ps1"
 )
 

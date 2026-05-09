@@ -20,6 +20,8 @@ For the current stable release baseline, see [yukino-v26.506.3741.1-baseline.md]
 - Confirm Skills page still opens separately.
 - Confirm the Plugins page does not fall back to the default Skills tab.
 - Confirm settings write behavior still works after changing an Agent Settings value.
+- Confirm Agent Settings > Workspace Dependencies contains the quiet Yukino local diagnostics row and that it copies `npm run diagnose`.
+- Confirm there is no standalone diagnostics nav item or diagnostics page in the main settings sidebar.
 - Confirm the sidebar background is visible and not stretched.
 - Confirm `.yukino` remains the active config home.
 - Confirm official OpenAI.Codex remains installed and separate from Yukino.

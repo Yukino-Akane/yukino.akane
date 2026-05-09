@@ -481,6 +481,52 @@ function Patch-AgentSettingsConfigWrites([string]$AssetsDir) {
     Write-Host "Patched Agent Settings config writes in $patched webview asset file(s)"
 }
 
+function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
+    if (-not (Test-Path -LiteralPath $AssetsDir)) {
+        return
+    }
+
+    $labelMarker = 'settings.agent.dependencies.localDiagnostics.label'
+    $commandMarker = 'npm run diagnose'
+    $scriptMarker = 'scripts/Test-YukinoLocalState.ps1'
+    $oldChildren = 'children:[we,Ne,J,$]'
+    $localDiagnosticsRow = @'
+(0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.label`,defaultMessage:`Yukino local diagnostics`,description:`Label for Yukino local diagnostics in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.description`,defaultMessage:`Copies the maintenance command for the read-only local report: npm run diagnose (scripts/Test-YukinoLocalState.ps1)`,description:`Description for Yukino local diagnostics in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,onClick:()=>{let e=navigator.clipboard?.writeText?.(`npm run diagnose`);e?e.then(()=>{P.success(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copied`,defaultMessage:`Yukino local diagnostic command copied`,description:`Toast shown after copying the local diagnostics command`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyFailed`,defaultMessage:`Copy failed. Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when copying the local diagnostics command fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyUnavailable`,defaultMessage:`Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when clipboard copy is unavailable`}))},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.button`,defaultMessage:`Copy command`,description:`Button label for copying the Yukino local diagnostics command`})]})})
+'@
+    $newChildren = 'children:[we,Ne,J,' + $localDiagnosticsRow + ',$]'
+
+    $patched = 0
+    foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "agent-settings-*.js") {
+        $text = [IO.File]::ReadAllText($asset.FullName)
+        if ($text.Contains($labelMarker)) {
+            if ($text.Contains($commandMarker) -and $text.Contains($scriptMarker)) {
+                continue
+            }
+            throw "Existing Yukino local diagnostics Settings entry is missing expected command markers in $($asset.FullName)."
+        }
+        if (-not $text.Contains("settings.agent.dependencies.sectionTitle") -or -not $text.Contains("diagnose-primary-runtime-dependencies")) {
+            continue
+        }
+        if (-not $text.Contains($oldChildren)) {
+            continue
+        }
+
+        $newText = $text.Replace($oldChildren, $newChildren)
+        if ($newText -eq $text) {
+            continue
+        }
+
+        [IO.File]::WriteAllText($asset.FullName, $newText, [Text.UTF8Encoding]::new($false))
+        $patched += 1
+    }
+
+    if ($patched -eq 0) {
+        throw "Cannot find Agent Settings dependencies row list for the Yukino local diagnostics entry."
+    }
+
+    Write-Host "Patched Yukino local diagnostics Settings entry in $patched webview asset file(s)"
+}
+
 function Patch-WebviewSidebarBackground([string]$ExtractDir, [string]$SourceImage) {
     if (-not (Test-Path -LiteralPath $SourceImage)) {
         throw "Sidebar background source image not found: $SourceImage"
@@ -603,6 +649,7 @@ function Patch-BuildJs([string]$ExtractDir, [string]$SidebarBackgroundSource) {
     Patch-PluginAuthGate -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-PluginSidebarRoute -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-AgentSettingsConfigWrites -AssetsDir (Join-Path $ExtractDir "webview\assets")
+    Patch-YukinoSettingsDiagnosticsEntry -AssetsDir (Join-Path $ExtractDir "webview\assets")
     Patch-WebviewSidebarBackground -ExtractDir $ExtractDir -SourceImage $SidebarBackgroundSource
 
     foreach ($relative in @("native-menu-locales", "skills", "webview")) {

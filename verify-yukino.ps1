@@ -30,6 +30,9 @@ $sidebarPluginRouteCurrentPatchedRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$
 $pluginDetailRedirectRegex = 'if\([A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
 $pluginDetailRedirectPatchedRegex = 'if\(!1&&[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
 $settingsPageSectionMapRegex = '\{[^{}]*"plugins-settings":[A-Za-z_$][A-Za-z0-9_$]*,"skills-settings":[A-Za-z_$][A-Za-z0-9_$]*[^{}]*\}'
+$settingsLocalDiagnosticsLabel = 'settings.agent.dependencies.localDiagnostics.label'
+$settingsLocalDiagnosticsCommand = 'npm run diagnose'
+$settingsLocalDiagnosticsScript = 'scripts/Test-YukinoLocalState.ps1'
 
 Add-Type -AssemblyName System.Drawing
 
@@ -192,6 +195,32 @@ if ($latestBuild) {
         }
         else {
             Add-Check "agent-settings-write-patch" "FAIL" "Expected patched batch-write call not found; inspect $($agentAssets[0].FullName)"
+        }
+
+        $agentHasLocalDiagnosticsEntry = $false
+        $agentHasStandaloneDiagnosticsRoute = $false
+        foreach ($asset in $agentAssets) {
+            $text = [IO.File]::ReadAllText($asset.FullName)
+            if (
+                $text.Contains($settingsLocalDiagnosticsLabel) -and
+                $text.Contains($settingsLocalDiagnosticsCommand) -and
+                $text.Contains($settingsLocalDiagnosticsScript) -and
+                $text.Contains("navigator.clipboard")
+            ) {
+                $agentHasLocalDiagnosticsEntry = $true
+            }
+            if ($text.Contains("diagnostics-settings") -or $text.Contains("/settings/diagnostics")) {
+                $agentHasStandaloneDiagnosticsRoute = $true
+            }
+        }
+        if ($agentHasLocalDiagnosticsEntry -and -not $agentHasStandaloneDiagnosticsRoute) {
+            Add-Check "settings-local-diagnostics-entry" "PASS" "Yukino local diagnostics entry is hidden inside Agent Settings maintenance"
+        }
+        elseif ($agentHasStandaloneDiagnosticsRoute) {
+            Add-Check "settings-local-diagnostics-entry" "FAIL" "Diagnostics should stay hidden inside Settings, not use a standalone diagnostics route"
+        }
+        else {
+            Add-Check "settings-local-diagnostics-entry" "FAIL" "Missing Yukino local diagnostics entry in Agent Settings maintenance"
         }
 
         $gatePattern = 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\(([A-Za-z_$][A-Za-z0-9_$]*)\)\{return\s+\2===`apikey`\}'

@@ -96,6 +96,8 @@ Equivalent direct command:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoLocalState.ps1
 ```
 
+The rebuilt UI also keeps this diagnostic entry quiet: in Agent Settings > Workspace Dependencies, Yukino shows a local diagnostics row that copies the same command. It does not add a standalone diagnostics page.
+
 After installation or release, use [docs/yukino-smoke-checklist.md](docs/yukino-smoke-checklist.md) for the manual GUI checks.
 
 The current stable baseline and roadmap are recorded in [docs/yukino-v26.506.3741.1-baseline.md](docs/yukino-v26.506.3741.1-baseline.md).

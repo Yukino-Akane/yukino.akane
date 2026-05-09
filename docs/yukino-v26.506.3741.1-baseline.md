@@ -70,7 +70,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoRelease
 ### Product Clarity
 
 - Add an in-app About or version surface that clearly says this is Yukino, shows the installed package version, and separates it from official Codex.
-- Promote the CLI local diagnostic into a compact in-app diagnostics view for `.yukino`, plugins, enabled bundled skills, sandbox mode, approval policy, and recent logs.
+- Keep local diagnostics tucked into Settings rather than adding a visible diagnostics page. The first UI step is the Agent Settings > Workspace Dependencies row that copies `npm run diagnose`; a future one-click runner should wait until the main-process IPC path is verified.
 - Make plugin and skill status easier to inspect from the UI before changing deeper runtime behavior.
 
 ### Update Discipline
