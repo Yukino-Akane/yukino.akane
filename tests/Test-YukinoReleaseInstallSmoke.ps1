@@ -32,6 +32,8 @@ Assert-True $browserSmokeText.Contains("installed-yukino-package") "Post-install
 Assert-True $browserSmokeText.Contains("app-server-yukino-process") "Post-install Browser smoke should verify the app-server process is running from Yukino."
 Assert-True $browserSmokeText.Contains("browser-use-native-pipe-server") "Post-install Browser smoke should verify Browser runtime pipe log markers."
 Assert-True $browserSmokeText.Contains("node_repl.exe") "Post-install Browser smoke should verify a live Yukino node_repl runtime."
+Assert-True $browserSmokeText.Contains('"node-repl-yukino-runtime" "WARN"') "Release install smoke should not fail solely because Browser runtime is lazy and untriggered."
+Assert-True $browserSmokeText.Contains("Browser runtime has not been triggered") "Release install smoke should report lazy Browser runtime evidence clearly."
 Assert-True $browserSmokeText.Contains("check-extension-installed.js") "Post-install Browser smoke should verify the Chrome extension is installed and enabled."
 Assert-True $browserSmokeText.Contains("check-native-host-manifest.js") "Post-install Browser smoke should verify the Chrome native host manifest."
 Assert-True $browserSmokeText.Contains("open-chrome-window.js") "Post-install Browser smoke should dry-run a harmless Chrome open command."

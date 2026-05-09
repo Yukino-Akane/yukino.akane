@@ -103,6 +103,10 @@ function Test-YukinoProcessPath([string]$Path, [string]$InstallLocation) {
     return $Path -like "$InstallLocation*"
 }
 
+function Get-LazyBrowserRuntimeDetail([string]$EvidenceName) {
+    return "Browser runtime has not been triggered in this launch window; $EvidenceName is expected only after a Browser tool call. Installed app-server, Chrome extension, native host, and cache checks still validate the post-install Browser surface."
+}
+
 Write-Host ""
 Write-Host "Yukino post-install Browser smoke" -ForegroundColor Cyan
 Write-Host "ProjectRoot: $ProjectRoot"
@@ -176,7 +180,7 @@ else {
         Add-Check "node-repl-yukino-runtime" "PASS" "$($yukinoNodeRepl.Count) node_repl.exe process(es); $((@($yukinoNodeRepl | Select-Object -ExpandProperty ExecutablePath -Unique)) -join '; ')"
     }
     else {
-        Add-Check "node-repl-yukino-runtime" "FAIL" "No live Yukino node_repl.exe runtime found."
+        Add-Check "node-repl-yukino-runtime" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "a live Yukino node_repl.exe runtime")
     }
 }
 
@@ -205,7 +209,7 @@ else {
         Add-Check "browser-use-native-pipe-server" "PASS" $browserPipeLog
     }
     else {
-        Add-Check "browser-use-native-pipe-server" "FAIL" "No browser-use native pipe listening marker in latest $RecentLogFileCount log file(s)."
+        Add-Check "browser-use-native-pipe-server" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the browser-use native pipe listening log marker")
     }
 
     $runtimePathLog = Find-FirstLogMatch -Files $logStatus.Files -Pattern "BrowserUseThreadConfig.*OpenAI\\Yukino\\bin\\node_repl\.exe"
@@ -213,7 +217,7 @@ else {
         Add-Check "browser-runtime-yukino-path-log" "PASS" $runtimePathLog
     }
     else {
-        Add-Check "browser-runtime-yukino-path-log" "FAIL" "No BrowserUseThreadConfig marker selecting the Yukino node_repl runtime."
+        Add-Check "browser-runtime-yukino-path-log" "WARN" (Get-LazyBrowserRuntimeDetail -EvidenceName "the BrowserUseThreadConfig Yukino runtime path log marker")
     }
 }
 
