@@ -47,6 +47,15 @@ foreach ($testName in @(
 
 $checklistText = [IO.File]::ReadAllText($smokeChecklist)
 foreach ($needle in @(
+    "Stable Maintenance Baseline",
+    "clean worktree",
+    "scripts\Test-YukinoLocalState.ps1",
+    "Browser Runtime",
+    "RequireBrowserRuntimeActivity",
+    "Chrome Extension And Plugin Cache",
+    "Release Safety",
+    "Manual GUI Smoke",
+    "Release Install Smoke",
     "Plugins page opens",
     "Skills page still opens",
     "settings write",

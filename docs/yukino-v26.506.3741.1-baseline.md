@@ -10,9 +10,9 @@ This document records the stable Yukino baseline after the 2026-05-09 release ha
 - Published package: `yukino.akane_26.506.3741.1_x64.msix`
 - MSIX SHA256: `DF2AC60E928AF817FE3E67415281150F033FE4D5E09A539E80DCD64D8701FC23`
 - Installed package: `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`
-- Current maintenance HEAD after hardening: `a046585 test: require matched Yukino Browser activity smoke`
+- Current maintenance HEAD after diagnostic cleanup: `0c9231c chore: quiet recovered Chrome plugin cache lock diagnostics`
 
-The release assets remain valid. Later maintenance commits through `a046585` improve diagnostics, Browser smoke verification, and repair logic; they do not require republishing the MSIX by themselves.
+The release assets remain valid. Later maintenance commits through `0c9231c` improve diagnostics, Browser smoke verification, and repair logic; they do not require republishing the MSIX by themselves.
 
 ## What Was Stabilized
 
@@ -42,8 +42,8 @@ git diff --check
 Latest expected result:
 
 - `npm test`: PASS.
-- `verify-yukino.ps1`: PASS, with historical/recovered Chrome plugin cache lock evidence allowed only when the cache is complete and no pending cleanup manifest remains.
-- `scripts\Test-YukinoLocalState.ps1`: PASS, with warnings only for historical/recovered plugin cache lock evidence or an intentionally dirty worktree during development.
+- `verify-yukino.ps1`: PASS, with historical/recovered Chrome plugin cache lock evidence reported as PASS only when the cache is complete, no pending cleanup entries remain, and the native host target is correct.
+- `scripts\Test-YukinoLocalState.ps1`: PASS on a clean pushed worktree, including recovered Chrome plugin cache lock evidence and matched Browser runtime activity evidence when recent logs contain it.
 - `scripts\Test-YukinoPostInstallBrowserSmoke.ps1 -RequireBrowserRuntimeActivity`: PASS after a manual Yukino Browser GUI task, requiring matched Browser turn log lines by `turnId`.
 - `git diff --check`: PASS.
 - Manual GUI smoke: passed by user confirmation.
@@ -63,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoRelease
 - `errorCode=-32600` in logs is not necessarily a config conflict. Treat it as config-relevant only for `method=config/...`, `configVersionConflict`, or `Unable to save`.
 - Missing recent `config/batchWrite` evidence after launch-only smoke is not a release warning. Validate the Agent Settings write path with a deliberate manual settings write.
 - Browser runtime cannot be forced from a standalone Node process because `browser-client.mjs` needs the trusted in-app native pipe bridge. For now, validate it by running a manual Yukino Browser task and then using strict post-install smoke to match the Browser turn logs.
-- `plugin_cache_windows_file_lock` can be historical/recovered on Windows. Treat it as active damage only when paired with an incomplete `chrome\latest` cache or `chrome\pending-delete.jsonl`.
+- `plugin_cache_windows_file_lock` can be historical/recovered on Windows. Treat it as active damage only when paired with an incomplete `chrome\latest` cache, pending cleanup entries, or a bad native host target.
 - Do not reinstall Yukino while the user is actively using it unless they explicitly approve the install smoke or release install.
 
 ## Next Roadmap
