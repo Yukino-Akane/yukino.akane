@@ -7,6 +7,7 @@ Set-StrictMode -Version Latest
 
 $publishScript = Join-Path $ProjectRoot "scripts\Publish-YukinoRelease.ps1"
 $releaseSafetyScript = Join-Path $ProjectRoot "scripts\Test-YukinoReleaseSafety.ps1"
+$releaseInstallSmokeScript = Join-Path $ProjectRoot "scripts\Test-YukinoReleaseInstall.ps1"
 $testRunner = Join-Path $ProjectRoot "tests\Run-YukinoTests.ps1"
 
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -27,10 +28,12 @@ Assert-True $scriptText.Contains("--latest") "Release script should be able to m
 Assert-True $scriptText.Contains("verify-yukino.ps1") "Release script should run project verification before publishing."
 Assert-True (Test-Path -LiteralPath $releaseSafetyScript) "Missing release safety script: $releaseSafetyScript"
 Assert-True $scriptText.Contains("Test-YukinoReleaseSafety.ps1") "Release script should run the release safety gate before publishing."
+Assert-True (Test-Path -LiteralPath $releaseInstallSmokeScript) "Missing release install smoke script: $releaseInstallSmokeScript"
 Assert-True $scriptText.Contains("ReleaseNotesPath") "Release script should emit or accept release notes."
 Assert-True (-not $scriptText.Contains("Add-AppxPackage")) "Release publishing should not install packages or close the active Yukino session."
 
 $testRunnerText = [IO.File]::ReadAllText($testRunner)
 Assert-True $testRunnerText.Contains("Test-YukinoReleaseSafety.ps1") "The test suite should include the release safety gate contract test."
+Assert-True $testRunnerText.Contains("Test-YukinoReleaseInstallSmoke.ps1") "The test suite should include the release install smoke contract test."
 
 Write-Host "Yukino release workflow test passed."

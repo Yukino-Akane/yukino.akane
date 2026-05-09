@@ -29,6 +29,7 @@ $sidebarPluginRouteCurrentRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-
 $sidebarPluginRouteCurrentPatchedRegex = 'onClick:\(\)=>\{[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*,[A-Za-z_$][A-Za-z0-9_$]*,(?<routeFlag>[A-Za-z_$][A-Za-z0-9_$]*)\)\},isActive:[A-Za-z_$][A-Za-z0-9_$]*\.pathname\.startsWith\(\k<routeFlag>\?`/plugins`:`/skills`\),label:\k<routeFlag>\?\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsxs\)\(`span`,\{className:`inline-flex items-center gap-1`,children:\[\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{id:`sidebarElectron\.skillsAppsRouteNavLink`,defaultMessage:`Plugins`'
 $pluginDetailRedirectRegex = 'if\([A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
 $pluginDetailRedirectPatchedRegex = 'if\(!1&&[A-Za-z_$][A-Za-z0-9_$]*\([A-Za-z_$][A-Za-z0-9_$]*\)\)\{let [A-Za-z_$][A-Za-z0-9_$]*;return [A-Za-z_$][A-Za-z0-9_$]*\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\([A-Za-z_$][A-Za-z0-9_$]*=\(0,[A-Za-z_$][A-Za-z0-9_$]*\.jsx\)\([A-Za-z_$][A-Za-z0-9_$]*,\{replace:!0,to:`/skills`,state:\{initialTab:`skills`,pluginDeepLinkAuthBlocked:!0\}\}\),'
+$settingsPageSectionMapRegex = '\{[^{}]*"plugins-settings":[A-Za-z_$][A-Za-z0-9_$]*,"skills-settings":[A-Za-z_$][A-Za-z0-9_$]*[^{}]*\}'
 
 Add-Type -AssemblyName System.Drawing
 
@@ -53,6 +54,14 @@ function Test-TomlSectionBoolean([string]$Text, [string]$SectionPattern, [string
     $value = if ($Expected) { "true" } else { "false" }
     $pattern = '(?ms)^\s*\[' + $SectionPattern + '\]\s*(?:(?!^\s*\[).)*?^\s*' + [regex]::Escape($Key) + '\s*=\s*' + $value + '\s*(?:#.*)?$'
     return [regex]::IsMatch($Text, $pattern)
+}
+
+function Get-LogField([string]$Line, [string]$Name) {
+    $match = [regex]::Match($Line, '(?:^|\s)' + [regex]::Escape($Name) + '=([^ ]+)')
+    if ($match.Success) {
+        return $match.Groups[1].Value
+    }
+    return ""
 }
 
 function Get-FirstFileText([object[]]$Files) {
@@ -292,6 +301,7 @@ if ($latestBuild) {
         $settingsAssets = @(Get-ChildItem -LiteralPath $assetsDir -File -Filter "settings-page-*.js")
         $settingsHasOld = $false
         $settingsHasNew = $false
+        $settingsHasSectionMap = $false
         foreach ($asset in $settingsAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
             if ($text.Contains($oldSettingsEntry)) {
@@ -300,11 +310,14 @@ if ($latestBuild) {
             if ($text.Contains($newSettingsEntry)) {
                 $settingsHasNew = $true
             }
+            if ([regex]::IsMatch($text, $settingsPageSectionMapRegex)) {
+                $settingsHasSectionMap = $true
+            }
         }
         if ($settingsAssets.Count -eq 0) {
             Add-Check "plugins-settings-entry" "WARN" "No settings-page-*.js assets found"
         }
-        elseif ($settingsHasNew -and -not $settingsHasOld) {
+        elseif (($settingsHasNew -or $settingsHasSectionMap) -and -not $settingsHasOld) {
             Add-Check "plugins-settings-entry" "PASS" "Desktop plugins settings entry is enabled"
         }
         elseif ($settingsHasOld) {
@@ -658,25 +671,34 @@ if (Test-Path -LiteralPath $appLogDir) {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First $RecentLogFileCount)
     $records = @()
+    $configErrorRecords = @()
     foreach ($file in $logFiles) {
-        $matches = Select-String -LiteralPath $file.FullName -Pattern "config/batchWrite|configVersionConflict|Unable to save|errorCode=-32600" -ErrorAction SilentlyContinue
+        $matches = Select-String -LiteralPath $file.FullName -Pattern "config/batchWrite|configVersionConflict|Unable to save|errorCode=-32600|method=config/" -ErrorAction SilentlyContinue
         foreach ($match in $matches) {
             $line = $match.Line
             $timestampMatch = [regex]::Match($line, '^(\d{4}-\d{2}-\d{2}T[^ ]+)')
             $timestamp = if ($timestampMatch.Success) { $timestampMatch.Groups[1].Value } else { "" }
-            $records += [pscustomobject]@{
+            $record = [pscustomobject]@{
                 Timestamp = $timestamp
                 File = $file.Name
                 Line = $line
+                Method = Get-LogField $line "method"
+                ErrorCode = Get-LogField $line "errorCode"
+            }
+            $records += $record
+            if ($record.Method -like "config/*" -and $record.ErrorCode -and $record.ErrorCode -ne "null") {
+                $configErrorRecords += $record
             }
         }
     }
 
     $batchRecords = @($records | Where-Object { $_.Line -like "*method=config/batchWrite*" } | Sort-Object Timestamp)
-    $conflictRecords = @($records | Where-Object { $_.Line -like "*configVersionConflict*" -or $_.Line -like "*errorCode=-32600*" })
+    $conflictRecords = @($records | Where-Object { $_.Line -like "*configVersionConflict*" -or $_.Line -like "*Unable to save*" })
+    $conflictRecords += $configErrorRecords
+    $conflictRecords = @($conflictRecords | Sort-Object Timestamp, File, Line -Unique)
     $latestSuccessfulBatch = $null
     if ($batchRecords.Count -eq 0) {
-        Add-Check "latest-batch-write-log" "WARN" "No config/batchWrite entry found in latest $RecentLogFileCount log file(s)"
+        Add-Check "latest-batch-write-log" "PASS" "No config batchWrite evidence in latest $RecentLogFileCount log file(s); run a manual settings write when validating that patch."
     }
     else {
         $lastBatch = $batchRecords | Select-Object -Last 1

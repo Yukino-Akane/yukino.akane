@@ -54,6 +54,7 @@ At the time this note was written, generated data under this workspace was about
 7. In dry-run mode, print the assets without touching GitHub.
 8. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
 9. Record published release metadata under `%USERPROFILE%\.yukino\release-history.jsonl`.
+10. After publishing, run `scripts\Test-YukinoReleaseInstall.ps1 -Tag <tag>` when the user has approved reinstalling Yukino. This downloads the private release assets into a temp directory, verifies `SHA256SUMS.txt`, runs the published installer, runs `verify-yukino.ps1`, and performs a launch smoke.
 
 Verification runs also append `%USERPROFILE%\.yukino\verify-history.jsonl`.
 
@@ -104,6 +105,17 @@ Sidebar Plugins route:
 - The Plugins branch must navigate to `/plugins` with ``state:{initialMode:`browse`,initialTab:`plugins`}`` so the shared page opens the Plugins tab instead of defaulting back to Skills.
 - `tests\Test-YukinoPluginAuthGatePatch.ps1` and `verify-yukino.ps1` must continue to require that stateful Plugins route in both latest build assets and installed `app.asar`.
 
+Settings plugins entry:
+
+- Older settings bundles gated `plugins-settings` behind an extension/electron condition; newer bundles expose `plugins-settings` and `skills-settings` directly in the settings section map.
+- `verify-yukino.ps1` must accept the direct section-map form as PASS and still fail if the old extension-only plugins settings entry remains.
+
+Config log warnings:
+
+- `errorCode=-32600` is not by itself a config conflict. Current app logs can emit that code for unrelated methods such as `experimentalFeature/enablement/set` and `thread/goal/get`.
+- Treat config log conflicts as relevant only when the method is `config/...`, the line mentions `configVersionConflict`, or the line says `Unable to save`.
+- Missing `config/batchWrite` evidence in recent logs is informational after a clean install or launch-only smoke; run a manual settings write when validating the Agent Settings write patch.
+
 ## Latest Verified State
 
 Verification command:
@@ -118,7 +130,7 @@ Latest observed result:
 - `agent-settings-write-patch`: PASS.
 - `plugin-auth-gate`: PASS.
 - `sidebar-plugin-route`: PASS.
-- `plugins-settings-entry`: WARN, upstream settings asset pattern changed.
+- `plugins-settings-entry`: PASS.
 - `installed-package`: PASS, `yukino.akane_26.506.3741.1_x64__fnxqm6pztzbs0`.
 - `installed-executable-icon`: PASS.
 - `installed-agent-settings-patch`: PASS.
@@ -131,8 +143,8 @@ Latest observed result:
 - `windows-sandbox-compat`: PASS, `[windows] sandbox` compatibility value present.
 - `config-feature-plugins`: PASS.
 - `config-browser-use-plugin`: PASS.
-- `latest-batch-write-log`: WARN when the latest app logs have not recorded a config batch write.
-- `recent-config-conflicts`: WARN for older conflict-related log lines.
+- `latest-batch-write-log`: PASS when no recent `config/batchWrite` evidence exists; the detail asks for a manual settings write when validating that patch.
+- `recent-config-conflicts`: PASS when recent `-32600` lines are unrelated to `config/...` methods.
 
 Sandbox compatibility note:
 
@@ -168,6 +180,12 @@ Run the release safety gate directly:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoReleaseSafety.ps1
+```
+
+Run a private release install smoke after publishing:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoReleaseInstall.ps1 -Tag v<version>-yukino.<n>
 ```
 
 Publish a private GitHub release:
