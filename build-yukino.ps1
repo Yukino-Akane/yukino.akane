@@ -531,22 +531,30 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
     }
 
     $labelMarker = 'settings.agent.dependencies.localDiagnostics.label'
+    $versionLabelMarker = 'settings.agent.dependencies.yukinoVersion.label'
     $commandMarker = 'npm run diagnose'
     $scriptMarker = 'scripts/Test-YukinoLocalState.ps1'
+    $versionSummary = 'Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino'
     $oldChildren = 'children:[we,Ne,J,$]'
+    $versionRow = @'
+(0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.label`,defaultMessage:`Yukino version`,description:`Label for Yukino version information in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.description`,defaultMessage:`Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino`,description:`Description for Yukino version information in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,onClick:()=>{let e=navigator.clipboard?.writeText?.(`Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino`);e?e.then(()=>{P.success(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copied`,defaultMessage:`Yukino version copied`,description:`Toast shown after copying Yukino version information`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copyFailed`,defaultMessage:`Copy failed. Yukino package: yukino.akane; release: v26.506.3741.1-yukino.2; config: %USERPROFILE%\\.yukino`,description:`Toast shown when copying Yukino version information fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.yukinoVersion.copyUnavailable`,defaultMessage:`Yukino package: yukino.akane; release: v26.506.3741.1-yukino.2; config: %USERPROFILE%\\.yukino`,description:`Toast shown when clipboard copy is unavailable for Yukino version information`}))},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.yukinoVersion.button`,defaultMessage:`Copy info`,description:`Button label for copying Yukino version information`})]})})
+'@
     $localDiagnosticsRow = @'
 (0,Z.jsx)(U,{label:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.label`,defaultMessage:`Yukino local diagnostics`,description:`Label for Yukino local diagnostics in settings`}),description:(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.description`,defaultMessage:`Copies the maintenance command for the read-only local report: npm run diagnose (scripts/Test-YukinoLocalState.ps1)`,description:`Description for Yukino local diagnostics in settings`}),control:(0,Z.jsxs)(ae,{color:`secondary`,size:`toolbar`,onClick:()=>{let e=navigator.clipboard?.writeText?.(`npm run diagnose`);e?e.then(()=>{P.success(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copied`,defaultMessage:`Yukino local diagnostic command copied`,description:`Toast shown after copying the local diagnostics command`}))}).catch(()=>{P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyFailed`,defaultMessage:`Copy failed. Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when copying the local diagnostics command fails`}))}):P.info(a.formatMessage({id:`settings.agent.dependencies.localDiagnostics.copyUnavailable`,defaultMessage:`Run npm run diagnose from the Yukino maintenance repo.`,description:`Toast shown when clipboard copy is unavailable`}))},children:[(0,Z.jsx)(me,{className:`icon-2xs`}),(0,Z.jsx)(x,{id:`settings.agent.dependencies.localDiagnostics.button`,defaultMessage:`Copy command`,description:`Button label for copying the Yukino local diagnostics command`})]})})
 '@
-    $newChildren = 'children:[we,Ne,J,' + $localDiagnosticsRow + ',$]'
+    $newChildren = 'children:[we,Ne,J,' + $versionRow + ',' + $localDiagnosticsRow + ',$]'
 
     $patched = 0
     foreach ($asset in Get-ChildItem -LiteralPath $AssetsDir -File -Filter "agent-settings-*.js") {
         $text = [IO.File]::ReadAllText($asset.FullName)
+        if ($text.Contains($versionLabelMarker) -and -not $text.Contains($labelMarker)) {
+            throw "Existing Yukino version Settings entry is present without the local diagnostics entry in $($asset.FullName)."
+        }
         if ($text.Contains($labelMarker)) {
-            if ($text.Contains($commandMarker) -and $text.Contains($scriptMarker)) {
+            if ($text.Contains($commandMarker) -and $text.Contains($scriptMarker) -and $text.Contains($versionLabelMarker) -and $text.Contains($versionSummary)) {
                 continue
             }
-            throw "Existing Yukino local diagnostics Settings entry is missing expected command markers in $($asset.FullName)."
+            throw "Existing Yukino local diagnostics Settings entry is missing expected command or version markers in $($asset.FullName)."
         }
         if (-not $text.Contains("settings.agent.dependencies.sectionTitle") -or -not $text.Contains("diagnose-primary-runtime-dependencies")) {
             continue
@@ -565,10 +573,10 @@ function Patch-YukinoSettingsDiagnosticsEntry([string]$AssetsDir) {
     }
 
     if ($patched -eq 0) {
-        throw "Cannot find Agent Settings dependencies row list for the Yukino local diagnostics entry."
+        throw "Cannot find Agent Settings dependencies row list for the Yukino local diagnostics and version entries."
     }
 
-    Write-Host "Patched Yukino local diagnostics Settings entry in $patched webview asset file(s)"
+    Write-Host "Patched Yukino local diagnostics and version Settings entries in $patched webview asset file(s)"
 }
 
 function Patch-WebviewSidebarBackground([string]$ExtractDir, [string]$SourceImage) {

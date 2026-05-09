@@ -33,6 +33,10 @@ $settingsPageSectionMapRegex = '\{[^{}]*"plugins-settings":[A-Za-z_$][A-Za-z0-9_
 $settingsLocalDiagnosticsLabel = 'settings.agent.dependencies.localDiagnostics.label'
 $settingsLocalDiagnosticsCommand = 'npm run diagnose'
 $settingsLocalDiagnosticsScript = 'scripts/Test-YukinoLocalState.ps1'
+$settingsYukinoVersionLabel = 'settings.agent.dependencies.yukinoVersion.label'
+$settingsYukinoVersionRelease = 'v26.506.3741.1-yukino.2'
+$settingsYukinoVersionPackage = 'yukino.akane'
+$settingsYukinoVersionConfigHome = '%USERPROFILE%\\.yukino'
 $chromeExtensionId = "hehggadaopoacecdllhhajmbjkdcmajg"
 $chromeNativeHostName = "com.openai.codexextension"
 
@@ -460,6 +464,7 @@ if ($latestBuild) {
         }
 
         $agentHasLocalDiagnosticsEntry = $false
+        $agentHasYukinoVersionEntry = $false
         $agentHasStandaloneDiagnosticsRoute = $false
         foreach ($asset in $agentAssets) {
             $text = [IO.File]::ReadAllText($asset.FullName)
@@ -470,6 +475,15 @@ if ($latestBuild) {
                 $text.Contains("navigator.clipboard")
             ) {
                 $agentHasLocalDiagnosticsEntry = $true
+            }
+            if (
+                $text.Contains($settingsYukinoVersionLabel) -and
+                $text.Contains($settingsYukinoVersionRelease) -and
+                $text.Contains($settingsYukinoVersionPackage) -and
+                $text.Contains($settingsYukinoVersionConfigHome) -and
+                $text.Contains("navigator.clipboard")
+            ) {
+                $agentHasYukinoVersionEntry = $true
             }
             if ($text.Contains("diagnostics-settings") -or $text.Contains("/settings/diagnostics")) {
                 $agentHasStandaloneDiagnosticsRoute = $true
@@ -483,6 +497,16 @@ if ($latestBuild) {
         }
         else {
             Add-Check "settings-local-diagnostics-entry" "FAIL" "Missing Yukino local diagnostics entry in Agent Settings maintenance"
+        }
+
+        if ($agentHasYukinoVersionEntry -and -not $agentHasStandaloneDiagnosticsRoute) {
+            Add-Check "settings-yukino-version-entry" "PASS" "Yukino version entry is hidden inside Agent Settings maintenance"
+        }
+        elseif ($agentHasStandaloneDiagnosticsRoute) {
+            Add-Check "settings-yukino-version-entry" "FAIL" "Version info should stay hidden inside Settings, not use a standalone diagnostics route"
+        }
+        else {
+            Add-Check "settings-yukino-version-entry" "FAIL" "Missing Yukino version entry in Agent Settings maintenance"
         }
 
         $unsupportedFeatureSync = Test-UnsupportedFeatureSyncPatched -AssetsDir $assetsDir

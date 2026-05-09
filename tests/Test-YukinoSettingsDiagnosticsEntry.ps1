@@ -26,6 +26,13 @@ Assert-True $buildText.Contains("settings.agent.dependencies.localDiagnostics.la
 Assert-True $buildText.Contains("npm run diagnose") "Settings diagnostics entry should reference the existing maintenance command."
 Assert-True ($buildText.Contains("scripts\Test-YukinoLocalState.ps1") -or $buildText.Contains("scripts/Test-YukinoLocalState.ps1")) "Settings diagnostics entry should point to the local state diagnostic script."
 Assert-True $buildText.Contains("navigator.clipboard") "Settings diagnostics entry should copy the command instead of inventing an unverified one-click PowerShell runner."
+Assert-True $buildText.Contains("settings.agent.dependencies.yukinoVersion.label") "Settings should include a quiet Yukino version row in the existing Agent dependencies maintenance section."
+Assert-True $buildText.Contains("Yukino version") "Yukino version row should be visibly labeled."
+Assert-True $buildText.Contains("yukino.akane") "Yukino version row should expose the package identity."
+Assert-True $buildText.Contains("v26.506.3741.1-yukino.2") "Yukino version row should expose the stable release baseline."
+Assert-True $buildText.Contains("%USERPROFILE%\\.yukino") "Yukino version row should expose the Yukino config home."
+$visibleVersionDescription = 'defaultMessage:`Yukino | package: yukino.akane | release: v26.506.3741.1-yukino.2 | config: %USERPROFILE%\\.yukino`'
+Assert-True $buildText.Contains($visibleVersionDescription) "Yukino version row should escape the visible config home so JavaScript renders the backslash."
 Assert-True (-not $buildText.Contains("diagnostics-settings")) "Settings diagnostics must not add a standalone diagnostics settings route."
 Assert-True (-not $buildText.Contains("/settings/diagnostics")) "Settings diagnostics must not add a visible diagnostics page."
 
@@ -33,6 +40,9 @@ $verifyText = [IO.File]::ReadAllText($verifyScript)
 Assert-True $verifyText.Contains("settings-local-diagnostics-entry") "Verification should check the latest build for the hidden Settings diagnostics entry."
 Assert-True $verifyText.Contains("settings.agent.dependencies.localDiagnostics.label") "Verification should require the local diagnostics settings label marker."
 Assert-True ($verifyText.Contains("scripts\Test-YukinoLocalState.ps1") -or $verifyText.Contains("scripts/Test-YukinoLocalState.ps1")) "Verification should require the local diagnostic script marker."
+Assert-True $verifyText.Contains("settings-yukino-version-entry") "Verification should check the latest build for the hidden Yukino version entry."
+Assert-True $verifyText.Contains("settings.agent.dependencies.yukinoVersion.label") "Verification should require the Yukino version settings label marker."
+Assert-True $verifyText.Contains("v26.506.3741.1-yukino.2") "Verification should require the stable release baseline marker."
 
 $runnerText = [IO.File]::ReadAllText($testRunner)
 Assert-True $runnerText.Contains("Test-YukinoSettingsDiagnosticsEntry.ps1") "The test suite should include the Settings diagnostics entry contract test."
