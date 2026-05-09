@@ -109,6 +109,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRele
 
 The publish script recalculates `SHA256SUMS.txt`, copies `Install-YukinoRelease.ps1` into `out/`, writes release notes, runs `verify-yukino.ps1`, and uploads the MSIX, certificate, checksum file, and installer through `gh release create`.
 
+Publishing also runs `scripts\Test-YukinoReleaseSafety.ps1`. The safety gate requires the GitHub repository to be private and rejects tracked credential/config paths, high-confidence key/token patterns, CPA skill names, and CPA-related paths inside the MSIX.
+
 ## Repository Policy
 
 Do not commit generated directories:

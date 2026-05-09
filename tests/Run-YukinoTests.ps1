@@ -10,6 +10,7 @@ $tests = @(
     "Test-YukinoIconAssets.ps1",
     "Test-YukinoExecutableIconPatch.ps1",
     "Test-YukinoWorkflowHardening.ps1",
+    "Test-YukinoReleaseSafety.ps1",
     "Test-YukinoBuildAudit.ps1",
     "Test-YukinoControlHome.ps1"
 )

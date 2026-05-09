@@ -125,6 +125,15 @@ foreach ($asset in $assets) {
     }
 }
 
+$releaseSafetyScript = Join-Path $scriptsDir "Test-YukinoReleaseSafety.ps1"
+if (-not (Test-Path -LiteralPath $releaseSafetyScript)) {
+    throw "Missing release safety script: $releaseSafetyScript"
+}
+& powershell -NoProfile -ExecutionPolicy Bypass -File $releaseSafetyScript -ProjectRoot $project -Repo $Repo -MsixPath $msix
+if ($LASTEXITCODE -ne 0) {
+    throw "Test-YukinoReleaseSafety.ps1 failed; refusing to publish release."
+}
+
 Write-Host ""
 Write-Host "Release assets prepared:"
 foreach ($asset in $assets) {

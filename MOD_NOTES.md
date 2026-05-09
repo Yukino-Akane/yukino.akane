@@ -50,9 +50,10 @@ At the time this note was written, generated data under this workspace was about
 3. Recompute `out\SHA256SUMS.txt` from the MSIX so stale checksums cannot be uploaded.
 4. Generate release notes under `out\release-notes-<tag>.md` unless an explicit notes path is provided.
 5. Run `verify-yukino.ps1`; publishing stops if verification fails.
-6. In dry-run mode, print the assets without touching GitHub.
-7. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
-8. Record published release metadata under `%USERPROFILE%\.yukino\release-history.jsonl`.
+6. Run `scripts\Test-YukinoReleaseSafety.ps1`; publishing stops if the repo is not private, tracked files contain credential/config paths or high-confidence key patterns, tracked files mention CPA skill identifiers, or the MSIX contains CPA-related paths.
+7. In dry-run mode, print the assets without touching GitHub.
+8. Outside dry-run mode, call `gh release create` with the MSIX, certificate, checksum file, and installer.
+9. Record published release metadata under `%USERPROFILE%\.yukino\release-history.jsonl`.
 
 Verification runs also append `%USERPROFILE%\.yukino\verify-history.jsonl`.
 
@@ -161,6 +162,12 @@ Prepare release assets without publishing:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Publish-YukinoRelease.ps1 -Tag v<version>-yukino.<n> -DryRun
+```
+
+Run the release safety gate directly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-YukinoReleaseSafety.ps1
 ```
 
 Publish a private GitHub release:
