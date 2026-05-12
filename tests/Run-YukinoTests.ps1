@@ -5,6 +5,7 @@ $ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $tests = @(
     "Test-YukinoBuildProcessSafety.ps1",
     "Test-YukinoReleaseWorkflow.ps1",
+    "Test-YukinoSetupInstaller.ps1",
     "Test-YukinoReleaseInstallSmoke.ps1",
     "Test-YukinoPostInstallBrowserSmoke.ps1",
     "Test-YukinoPluginAuthGatePatch.ps1",

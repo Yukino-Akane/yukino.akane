@@ -104,7 +104,9 @@ The current stable baseline and roadmap are recorded in [docs/yukino-v26.506.374
 
 ## Install From A Private Release
 
-Download the MSIX package, `Yukino.cer`, `SHA256SUMS.txt`, and `Install-YukinoRelease.ps1` from the private GitHub release, then run:
+For new users, download `Yukino-Setup-<version>.exe` from the private GitHub release and run it. The setup executable extracts the release assets, imports `Yukino.cer`, verifies the MSIX checksum when `SHA256SUMS.txt` is present, and installs Yukino.
+
+For manual installs, download the MSIX package, `Yukino.cer`, `SHA256SUMS.txt`, and `Install-YukinoRelease.ps1` from the private GitHub release into one directory, then run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-YukinoRelease.ps1

@@ -81,6 +81,21 @@ else {
 $msixHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $msix).Hash.ToUpperInvariant()
 Write-AsciiFile -Path $checksum -Text "$msixHash  $msixName"
 
+$setupBuilder = Join-Path $scriptsDir "New-YukinoSetup.ps1"
+if (-not (Test-Path -LiteralPath $setupBuilder)) {
+    throw "Missing setup builder: $setupBuilder"
+}
+$setup = Join-Path $outDir ("Yukino-Setup-{0}.exe" -f $targetVersion)
+& powershell -NoProfile -ExecutionPolicy Bypass -File $setupBuilder `
+    -MsixPath $msix `
+    -CertificatePath $certificate `
+    -ChecksumPath $checksum `
+    -InstallerPath $installer `
+    -OutputPath $setup
+if ($LASTEXITCODE -ne 0) {
+    throw "New-YukinoSetup.ps1 failed."
+}
+
 if (-not $ReleaseNotesPath) {
     $safeTag = $Tag -replace '[^\w.\-]+', '-'
     $ReleaseNotesPath = Join-Path $outDir "release-notes-$safeTag.md"
@@ -93,6 +108,7 @@ This private Yukino build is based on the installed OpenAI Codex Desktop package
 
 ### Included Assets
 
+- ``Yukino-Setup-$targetVersion.exe``
 - ``$msixName``
 - ``Yukino.cer``
 - ``SHA256SUMS.txt``
@@ -105,7 +121,9 @@ This private Yukino build is based on the installed OpenAI Codex Desktop package
 
 ### Install
 
-Run ``Install-YukinoRelease.ps1`` from the release assets. The installer imports ``Yukino.cer``, closes any running Yukino process, and installs ``$msixName``.
+For the simplest install, run ``Yukino-Setup-$targetVersion.exe``. It extracts the release assets, imports ``Yukino.cer``, closes any running Yukino process, and installs ``$msixName``.
+
+For manual installs, download the MSIX, certificate, checksum file, and ``Install-YukinoRelease.ps1`` into one directory, then run the PowerShell installer script.
 "@
 Write-AsciiFile -Path $ReleaseNotesPath -Text $notes
 
@@ -118,7 +136,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "verify-yukino.ps1 failed; refusing to publish release."
 }
 
-$assets = @($msix, $certificate, $checksum, $installer)
+$assets = @($msix, $certificate, $checksum, $installer, $setup)
 foreach ($asset in $assets) {
     if (-not (Test-Path -LiteralPath $asset)) {
         throw "Missing release asset: $asset"
@@ -193,7 +211,7 @@ elseif ($releaseViewExitCode -ne 0 -and $releaseViewExitCode -ne 1) {
 
 $arguments = @(
     "release", "create", $Tag,
-    $msix, $certificate, $checksum, $installer,
+    $msix, $certificate, $checksum, $installer, $setup,
     "--repo", $Repo,
     "--target", $Target,
     "--title", $Title,
